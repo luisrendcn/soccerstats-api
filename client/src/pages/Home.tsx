@@ -5,8 +5,10 @@ import { MatchCard } from "@/components/MatchCard";
 import { Trophy, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/lib/i18n";
 
 export default function Home() {
+  const { t } = useLanguage();
   const { data: matches, isLoading: matchesLoading } = useMatches();
   const { data: teams, isLoading: teamsLoading } = useTeams();
 
@@ -59,12 +61,12 @@ export default function Home() {
   }
 
   return (
-    <Layout title="League Overview">
+    <Layout title={t('leagueOverview')}>
       {/* Standings Table */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-display">Standings</h2>
-          <Link href="/teams" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">View All Teams</Link>
+          <h2 className="text-lg font-display">{t('standings')}</h2>
+          <Link href="/teams" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">{t('viewAllTeams')}</Link>
         </div>
         
         <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
@@ -96,7 +98,7 @@ export default function Home() {
               {standings?.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground italic">
-                    No teams registered yet.
+                    {t('noTeamsRegistered')}
                   </td>
                 </tr>
               )}
@@ -108,8 +110,8 @@ export default function Home() {
       {/* Recent Matches */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-display">Recent Results</h2>
-          <Link href="/matches" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">View Schedule</Link>
+          <h2 className="text-lg font-display">{t('recentResults')}</h2>
+          <Link href="/matches" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">{t('viewSchedule')}</Link>
         </div>
         
         <div className="space-y-4">

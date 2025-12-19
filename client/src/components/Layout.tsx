@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { BottomNav } from "./BottomNav";
+import { LanguageSelector } from "./LanguageSelector";
 
 interface LayoutProps {
   children: ReactNode;
@@ -19,6 +20,7 @@ export function Layout({ children, header, title }: LayoutProps) {
               {title || "League App"}
             </h1>
           )}
+          <LanguageSelector />
         </div>
       </header>
 
