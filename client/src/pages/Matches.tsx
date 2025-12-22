@@ -6,8 +6,10 @@ import { MatchCard } from "@/components/MatchCard";
 import { Loader2, Plus } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 export default function Matches() {
+  const { t } = useLanguage();
   const { data: matches, isLoading: matchesLoading } = useMatches();
   const { data: teams, isLoading: teamsLoading } = useTeams();
   const [filter, setFilter] = useState<'all' | 'scheduled' | 'finished'>('all');
@@ -28,19 +30,25 @@ export default function Matches() {
     return m.status === filter;
   });
 
+  const filterLabels: Record<'all' | 'scheduled' | 'finished', string> = {
+    all: t('all'),
+    scheduled: t('scheduled'),
+    finished: t('finished'),
+  };
+
   return (
-    <Layout title="Match Schedule">
+    <Layout title={t('matchSchedule')}>
       {/* Filter Tabs */}
       <div className="flex p-1 bg-muted/50 rounded-xl mb-6">
-        {['all', 'scheduled', 'finished'].map((f) => (
+        {(['all', 'scheduled', 'finished'] as const).map((f) => (
           <button
             key={f}
-            onClick={() => setFilter(f as any)}
+            onClick={() => setFilter(f)}
             className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
               filter === f ? 'bg-background shadow-sm text-primary' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            {f}
+            {filterLabels[f]}
           </button>
         ))}
       </div>
@@ -52,9 +60,9 @@ export default function Matches() {
 
         {filteredMatches?.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-muted-foreground mb-4">No {filter !== 'all' ? filter : ''} matches found.</p>
+            <p className="text-muted-foreground mb-4">{t('noMatches')}</p>
             <Link href="/matches/new">
-              <Button>Schedule a Match</Button>
+              <Button>{t('scheduleAMatch')}</Button>
             </Link>
           </div>
         )}

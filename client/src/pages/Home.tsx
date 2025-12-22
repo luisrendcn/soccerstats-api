@@ -5,7 +5,7 @@ import { MatchCard } from "@/components/MatchCard";
 import { Trophy, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
-import { useLanguage } from "@/lib/i18n";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 export default function Home() {
   const { t } = useLanguage();

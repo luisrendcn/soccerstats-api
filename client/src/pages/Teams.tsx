@@ -10,8 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 export default function Teams() {
+  const { t } = useLanguage();
   const { data: teams, isLoading } = useTeams();
   const { toast } = useToast();
   const createTeam = useCreateTeam();
@@ -25,12 +27,12 @@ export default function Teams() {
 
     try {
       await createTeam.mutateAsync({ name: newTeamName, color: newTeamColor });
-      toast({ title: "Team created!", description: `${newTeamName} has been added.` });
+      toast({ title: t('teamCreated'), description: `${newTeamName} ${t('hasBeenAdded')}` });
       setNewTeamName("");
       setNewTeamColor("#000000");
       setIsDialogOpen(false);
     } catch (err) {
-      toast({ variant: "destructive", title: "Error", description: (err as Error).message });
+      toast({ variant: "destructive", title: t('error'), description: (err as Error).message });
     }
   };
 
@@ -39,7 +41,7 @@ export default function Teams() {
   }
 
   return (
-    <Layout title="Teams">
+    <Layout title={t('teamsTitle')}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-24">
         {/* Create Team Card */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -48,16 +50,16 @@ export default function Teams() {
               <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3 group-hover:bg-primary/10 transition-colors">
                 <Plus className="w-6 h-6 text-muted-foreground group-hover:text-primary" />
               </div>
-              <span className="font-display font-bold text-muted-foreground group-hover:text-primary">Create New Team</span>
+              <span className="font-display font-bold text-muted-foreground group-hover:text-primary">{t('createNewTeam')}</span>
             </button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Register New Team</DialogTitle>
+              <DialogTitle>{t('registerNewTeam')}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleCreateTeam} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Team Name</Label>
+                <Label htmlFor="name">{t('teamName')}</Label>
                 <Input 
                   id="name" 
                   value={newTeamName} 
@@ -67,7 +69,7 @@ export default function Teams() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="color">Team Color</Label>
+                <Label htmlFor="color">{t('teamColor')}</Label>
                 <div className="flex gap-2 items-center">
                   <Input 
                     id="color" 
@@ -80,7 +82,7 @@ export default function Teams() {
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={createTeam.isPending}>
-                {createTeam.isPending ? "Creating..." : "Create Team"}
+                {createTeam.isPending ? t('creating') : t('createTeam')}
               </Button>
             </form>
           </DialogContent>
@@ -95,7 +97,7 @@ export default function Teams() {
               <div>
                 <div className="w-10 h-10 rounded-full mb-4 shadow-sm" style={{ backgroundColor: team.color }} />
                 <h3 className="font-display font-bold text-xl leading-tight mb-1">{team.name}</h3>
-                <p className="text-sm text-muted-foreground">Tap to view roster</p>
+                <p className="text-sm text-muted-foreground">{t('tapToViewRoster')}</p>
               </div>
               
               <div className="flex justify-end mt-4">

@@ -1,4 +1,4 @@
-import { useLanguage } from "@/lib/i18n";
+import { useLanguage } from "@/lib/i18n.tsx";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
