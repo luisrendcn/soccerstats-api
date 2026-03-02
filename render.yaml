@@ -4,7 +4,9 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: npm install --include=dev && npm run build
+    # Install production deps first to avoid compiling native dev modules (like better-sqlite3),
+    # then install minimal build tools required to run the build.
+    buildCommand: npm ci --omit=dev --no-audit && npm install --no-save tsx vite esbuild typescript && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
