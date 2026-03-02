@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: soccer-stats-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+        scope: run_and_build
+      - key: DATABASE_URL
+        sync: false
+      - key: PORT
+        value: 10000
