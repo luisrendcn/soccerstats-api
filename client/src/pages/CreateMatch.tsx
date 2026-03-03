@@ -13,7 +13,8 @@ import { Loader2 } from "lucide-react";
 export default function CreateMatch() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { data: teams, isLoading } = useTeams();
+  const { data: teamsResp, isLoading } = useTeams();
+  const teams = teamsResp;
   const createMatch = useCreateMatch();
 
   const [homeTeamId, setHomeTeamId] = useState<string>("");
@@ -41,7 +42,7 @@ export default function CreateMatch() {
       await createMatch.mutateAsync({
         homeTeamId: parseInt(homeTeamId),
         awayTeamId: parseInt(awayTeamId),
-        date: dateTime as unknown as string, // Cast because we handle formatting in hook
+        date: dateTime,
         location: locationName || "Main Field",
         status: "scheduled"
       });
@@ -68,7 +69,7 @@ export default function CreateMatch() {
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teams?.map(team => (
+                  {teams?.map((team: any) => (
                     <SelectItem key={team.id} value={String(team.id)}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -82,7 +83,7 @@ export default function CreateMatch() {
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teams?.map(team => (
+                  {teams?.map((team: any) => (
                     <SelectItem key={team.id} value={String(team.id)}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>

@@ -1,14 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertTeam, type InsertPlayer } from "@shared/routes";
+import { apiFetch } from "@/lib/api";
 
-export function useTeams() {
+export function useTeams(page = 1, limit = 10, search = "") {
   return useQuery({
-    queryKey: [api.teams.list.path],
+    queryKey: [api.teams.list.path, page, limit, search],
     queryFn: async () => {
-      const res = await fetch(api.teams.list.path, { credentials: "include" });
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', String(limit));
+      if (search) params.set('search', search);
+      const res = await apiFetch(`${api.teams.list.path}?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error('Failed to fetch teams');
       return api.teams.list.responses[200].parse(await res.json());
     },
+
   });
 }
 
@@ -17,7 +23,7 @@ export function useTeam(id: number) {
     queryKey: [api.teams.get.path, id],
     queryFn: async () => {
       const url = buildUrl(api.teams.get.path, { id });
-      const res = await fetch(url, { credentials: "include" });
+      const res = await apiFetch(url, { credentials: "include" });
       if (res.status === 404) return null;
       if (!res.ok) throw new Error('Failed to fetch team');
       return api.teams.get.responses[200].parse(await res.json());
@@ -31,7 +37,7 @@ export function useCreateTeam() {
   return useMutation({
     mutationFn: async (data: InsertTeam) => {
       const validated = api.teams.create.input.parse(data);
-      const res = await fetch(api.teams.create.path, {
+      const res = await apiFetch(api.teams.create.path, {
         method: api.teams.create.method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(validated),
@@ -50,12 +56,16 @@ export function useCreateTeam() {
   });
 }
 
-export function useTeamPlayers(teamId: number) {
+export function useTeamPlayers(teamId: number, page = 1, limit = 10, search = "") {
   return useQuery({
-    queryKey: [api.players.list.path, teamId],
+    queryKey: [api.players.list.path, teamId, page, limit, search],
     queryFn: async () => {
-      const url = buildUrl(api.players.list.path, { teamId });
-      const res = await fetch(url, { credentials: "include" });
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', String(limit));
+      if (search) params.set('search', search);
+      const url = `${buildUrl(api.players.list.path, { teamId })}?${params.toString()}`;
+      const res = await apiFetch(url, { credentials: "include" });
       if (!res.ok) throw new Error('Failed to fetch players');
       return api.players.list.responses[200].parse(await res.json());
     },
@@ -68,7 +78,7 @@ export function useCreatePlayer() {
   return useMutation({
     mutationFn: async (data: InsertPlayer) => {
       const validated = api.players.create.input.parse(data);
-      const res = await fetch(api.players.create.path, {
+      const res = await apiFetch(api.players.create.path, {
         method: api.players.create.method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(validated),

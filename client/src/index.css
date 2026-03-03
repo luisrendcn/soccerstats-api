@@ -79,6 +79,15 @@
   }
 }
 
+/* Dynamic Team Color Variables */
+[data-team-color] {
+  background-color: var(--team-color, currentColor);
+}
+
+[data-team-color-light] {
+  background-color: var(--team-color-light, currentColor);
+}
+
 /* Custom Scrollbar for a premium feel */
 ::-webkit-scrollbar {
   width: 8px;

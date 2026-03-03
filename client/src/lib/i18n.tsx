@@ -76,6 +76,15 @@ const translations = {
     error: 'Error',
     success: 'Success',
     noResultsFound: 'No results found.',
+
+    // Settings
+    settings: 'Settings',
+    appearance: 'Appearance',
+    darkMode: 'Dark mode',
+    compactMode: 'Compact layout',
+    notifications: 'Notifications',
+    enableNotifications: 'Enable notifications',
+    resetSettings: 'Reset settings',
   },
   es: {
     // Navigation
@@ -150,7 +159,16 @@ const translations = {
     error: 'Error',
     success: 'Éxito',
     noResultsFound: 'No se encontraron resultados.',
-  },
+
+    // Settings
+    settings: 'Configuración',
+    appearance: 'Apariencia',
+    darkMode: 'Modo oscuro',
+    compactMode: 'Modo compacto',
+    notifications: 'Notificaciones',
+    enableNotifications: 'Habilitar notificaciones',
+    resetSettings: 'Restablecer configuración',
+  }
 };
 
 interface LanguageContextType {

@@ -1,11 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertMatch, type InsertGoal } from "@shared/routes";
 
-export function useMatches() {
+export function useMatches(page = 1, limit = 10, search = "") {
   return useQuery({
-    queryKey: [api.matches.list.path],
+    queryKey: [api.matches.list.path, page, limit, search],
     queryFn: async () => {
-      const res = await fetch(api.matches.list.path, { credentials: "include" });
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('limit', String(limit));
+      if (search) params.set('search', search);
+      const res = await fetch(`${api.matches.list.path}?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error('Failed to fetch matches');
       return api.matches.list.responses[200].parse(await res.json());
     },

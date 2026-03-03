@@ -40,6 +40,14 @@ export const api = {
         400: errorSchemas.validation,
       },
     },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/teams/:id',
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
+      },
+    },
   },
   players: {
     list: {
@@ -56,6 +64,14 @@ export const api = {
       responses: {
         201: z.custom<typeof players.$inferSelect>(),
         400: errorSchemas.validation,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/players/:id',
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
       },
     },
   },
@@ -93,6 +109,14 @@ export const api = {
         404: errorSchemas.notFound,
       },
     },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/matches/:id',
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
+      },
+    },
   },
   goals: {
     create: {
@@ -113,6 +137,12 @@ export const api = {
     },
   },
 };
+
+// Export input types inferred from the Zod schemas used by the API
+export type InsertTeam = z.infer<typeof insertTeamSchema>;
+export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
+export type InsertMatch = z.infer<typeof insertMatchSchema>;
+export type InsertGoal = z.infer<typeof insertGoalSchema>;
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {
   let url = path;

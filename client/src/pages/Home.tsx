@@ -1,22 +1,29 @@
 import { useMatches } from "@/hooks/use-matches";
 import { useTeams } from "@/hooks/use-teams";
 import { Layout } from "@/components/Layout";
+import { TeamColorBadge } from "@/components/TeamColor";
 import { MatchCard } from "@/components/MatchCard";
 import { Trophy, Loader2 } from "lucide-react";
 import { Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/lib/i18n.tsx";
 
 export default function Home() {
   const { t } = useLanguage();
-  const { data: matches, isLoading: matchesLoading } = useMatches();
-  const { data: teams, isLoading: teamsLoading } = useTeams();
+  const { data: matchesResp, isLoading: matchesLoading } = useMatches();
+  const { data: teamsResp, isLoading: teamsLoading } = useTeams();
+  const matches = matchesResp;
+  const teams = teamsResp;
 
   const isLoading = matchesLoading || teamsLoading;
+  const { data: auth } = useAuth();
+  const isPublic = auth?.userRole === 'public';
+  const canCreateMatch = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager';
 
   // Calculate Standings
-  const standings = teams?.map(team => {
-    const teamMatches = matches?.filter(m => 
+  const standings = teams?.map((team: any) => {
+    const teamMatches = matches?.filter((m: any) => 
       m.status === 'finished' && (m.homeTeamId === team.id || m.awayTeamId === team.id)
     ) || [];
 
@@ -24,7 +31,7 @@ export default function Home() {
     let played = 0;
     let gd = 0;
 
-    teamMatches.forEach(m => {
+    teamMatches.forEach((m: any) => {
       played++;
       const isHome = m.homeTeamId === team.id;
       const goalsFor = isHome ? (m.homeScore || 0) : (m.awayScore || 0);
@@ -37,19 +44,19 @@ export default function Home() {
     });
 
     return { ...team, points, played, gd };
-  }).sort((a, b) => b.points - a.points || b.gd - a.gd);
+  }).sort((a: any, b: any) => b.points - a.points || b.gd - a.gd);
 
   // Get recent finished matches
   const recentMatches = matches
-    ?.filter(m => m.status === "finished")
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    ?.filter((m: any) => m.status === "finished")
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 3);
 
   // Enrich matches with team data
-  const enrichedMatches = recentMatches?.map(m => ({
+  const enrichedMatches = recentMatches?.map((m: any) => ({
     ...m,
-    homeTeam: teams?.find(t => t.id === m.homeTeamId),
-    awayTeam: teams?.find(t => t.id === m.awayTeamId),
+    homeTeam: teams?.find((t: any) => t.id === m.homeTeamId),
+    awayTeam: teams?.find((t: any) => t.id === m.awayTeamId),
   }));
 
   if (isLoading) {
@@ -65,7 +72,9 @@ export default function Home() {
       {/* Standings Table */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-display">{t('standings')}</h2>
+          <h2 className="text-lg font-display">
+            {t('standings')} <span className="text-xs text-muted-foreground">(todos los torneos)</span>
+          </h2>
           <Link href="/teams" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">{t('viewAllTeams')}</Link>
         </div>
         
@@ -81,12 +90,12 @@ export default function Home() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
-              {standings?.map((team, index) => (
+              {standings?.map((team: any, index: any) => (
                 <tr key={team.id} className="hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-3 font-mono text-muted-foreground">{index + 1}</td>
                   <td className="px-2 py-3 font-bold truncate max-w-[120px]">
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
+                      <TeamColorBadge color={team.color} />
                       {team.name}
                     </div>
                   </td>
@@ -115,7 +124,7 @@ export default function Home() {
         </div>
         
         <div className="space-y-4">
-          {enrichedMatches?.map(match => (
+          {enrichedMatches?.map((match: any) => (
             <MatchCard key={match.id} match={match} />
           ))}
           
@@ -123,9 +132,11 @@ export default function Home() {
             <div className="text-center py-10 bg-muted/20 rounded-xl border border-dashed border-border">
               <Trophy className="w-10 h-10 mx-auto text-muted-foreground/30 mb-2" />
               <p className="text-sm text-muted-foreground">No matches played yet.</p>
-              <Link href="/matches/new" className="mt-2 inline-block text-primary text-sm font-medium hover:underline">
-                Schedule a Match
-              </Link>
+              {canCreateMatch && (
+                <Link href="/matches/new" className="mt-2 inline-block text-primary text-sm font-medium hover:underline">
+                  Schedule a Match
+                </Link>
+              )}
             </div>
           )}
         </div>

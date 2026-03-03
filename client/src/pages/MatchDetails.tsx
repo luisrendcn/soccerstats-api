@@ -3,6 +3,7 @@ import { useRoute } from "wouter";
 import { useMatch, useUpdateMatch, useCreateGoal, useMatchGoals } from "@/hooks/use-matches";
 import { useTeam, useTeamPlayers } from "@/hooks/use-teams";
 import { Layout } from "@/components/Layout";
+import { TeamColorCircleLarge } from "@/components/TeamColor";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +13,7 @@ import { Loader2, Clock, MapPin, Trophy, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function MatchDetails() {
   const [matchRoute, params] = useRoute("/matches/:id");
@@ -23,17 +25,20 @@ export default function MatchDetails() {
   const { data: homeTeam } = useTeam(match?.homeTeamId || 0);
   const { data: awayTeam } = useTeam(match?.awayTeamId || 0);
   
-  const { data: homePlayers } = useTeamPlayers(match?.homeTeamId || 0);
-  const { data: awayPlayers } = useTeamPlayers(match?.awayTeamId || 0);
+  const { data: homePlayersResp } = useTeamPlayers(match?.homeTeamId || 0);
+  const { data: awayPlayersResp } = useTeamPlayers(match?.awayTeamId || 0);
+  const homePlayers = homePlayersResp;
+  const awayPlayers = awayPlayersResp;
 
   const updateMatch = useUpdateMatch();
   const createGoal = useCreateGoal();
   const { toast } = useToast();
-
-  const [isGoalDialogOpen, setIsGoalDialogOpen] = useState(false);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const { data: auth } = useAuth();
+  const canModifyMatch = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager' || auth?.userRole === 'referee';
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("unknown");
   const [goalMinute, setGoalMinute] = useState("");
+  const [isGoalDialogOpen, setIsGoalDialogOpen] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState("");
 
   const isLoading = matchLoading || goalsLoading || !match || !homeTeam || !awayTeam;
   const isFinished = match?.status === "finished";
@@ -91,9 +96,9 @@ export default function MatchDetails() {
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
             <div className="flex-1 flex flex-col items-center gap-2">
-              <div className="w-16 h-16 rounded-full shadow-md flex items-center justify-center text-2xl font-bold text-white" style={{ backgroundColor: homeTeam.color }}>
+              <TeamColorCircleLarge color={homeTeam.color}>
                 {homeTeam.name.substring(0, 1)}
-              </div>
+              </TeamColorCircleLarge>
               <h3 className="font-display font-bold text-center leading-tight">{homeTeam.name}</h3>
             </div>
 
@@ -107,9 +112,9 @@ export default function MatchDetails() {
             </div>
 
             <div className="flex-1 flex flex-col items-center gap-2">
-              <div className="w-16 h-16 rounded-full shadow-md flex items-center justify-center text-2xl font-bold text-white" style={{ backgroundColor: awayTeam.color }}>
+              <TeamColorCircleLarge color={awayTeam.color}>
                 {awayTeam.name.substring(0, 1)}
-              </div>
+              </TeamColorCircleLarge>
               <h3 className="font-display font-bold text-center leading-tight">{awayTeam.name}</h3>
             </div>
           </div>
@@ -123,7 +128,9 @@ export default function MatchDetails() {
         {/* Actions */}
         {!isFinished && (
           <div className="p-4 bg-muted/10 border-t border-border grid grid-cols-2 gap-3">
-            <Dialog open={isGoalDialogOpen} onOpenChange={setIsGoalDialogOpen}>
+            {canModifyMatch && (
+              <>
+              <Dialog open={isGoalDialogOpen} onOpenChange={setIsGoalDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="w-full font-bold shadow-sm" variant="default">
                   <Trophy className="w-4 h-4 mr-2" /> Add Goal
@@ -155,10 +162,10 @@ export default function MatchDetails() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="unknown">Unknown Player</SelectItem>
-                        {selectedTeamId === String(homeTeam.id) && homePlayers?.map(p => (
+                        {selectedTeamId === String(homeTeam.id) && homePlayers?.map((p: any) => (
                           <SelectItem key={p.id} value={String(p.id)}>{p.name} #{p.number}</SelectItem>
                         ))}
-                        {selectedTeamId === String(awayTeam.id) && awayPlayers?.map(p => (
+                        {selectedTeamId === String(awayTeam.id) && awayPlayers?.map((p: any) => (
                           <SelectItem key={p.id} value={String(p.id)}>{p.name} #{p.number}</SelectItem>
                         ))}
                       </SelectContent>
@@ -182,9 +189,11 @@ export default function MatchDetails() {
               </DialogContent>
             </Dialog>
 
-            <Button variant="outline" className="w-full" onClick={handleFinishMatch} disabled={updateMatch.isPending}>
-              End Match
-            </Button>
+              <Button variant="outline" className="w-full" onClick={handleFinishMatch} disabled={updateMatch.isPending}>
+                End Match
+              </Button>
+              </>
+            )}
           </div>
         )}
       </div>
