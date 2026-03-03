@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
-    "build": "NODE_ENV=development npm install && tsx script/build.ts",
+    "build": "npx cross-env NODE_ENV=development npm ci --include=dev && npx tsx script/build.ts",
     "build:ci": "NODE_ENV=development npm install && npm run build",
     "start": "cross-env NODE_ENV=production node dist/index.mjs",
     "test": "vitest run --root . server/tests/integration.test.ts server/tests/real-db.test.ts",
