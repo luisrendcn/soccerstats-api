@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertMatch, type InsertGoal } from "@shared/routes";
+import { apiFetch } from "@/lib/api";
 
 export function useMatches(page = 1, limit = 10, search = "") {
   return useQuery({
@@ -9,7 +10,7 @@ export function useMatches(page = 1, limit = 10, search = "") {
       params.set('page', String(page));
       params.set('limit', String(limit));
       if (search) params.set('search', search);
-      const res = await fetch(`${api.matches.list.path}?${params.toString()}`, { credentials: "include" });
+      const res = await apiFetch(`${api.matches.list.path}?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch matches');
       return api.matches.list.responses[200].parse(await res.json());
     },
@@ -21,7 +22,7 @@ export function useMatch(id: number) {
     queryKey: [api.matches.get.path, id],
     queryFn: async () => {
       const url = buildUrl(api.matches.get.path, { id });
-      const res = await fetch(url, { credentials: "include" });
+      const res = await apiFetch(url);
       if (res.status === 404) return null;
       if (!res.ok) throw new Error('Failed to fetch match');
       return api.matches.get.responses[200].parse(await res.json());
@@ -40,11 +41,10 @@ export function useCreateMatch() {
         date: new Date(data.date).toISOString() // Serialize date
       };
       
-      const res = await fetch(api.matches.create.path, {
+      const res = await apiFetch(api.matches.create.path, {
         method: api.matches.create.method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        credentials: "include",
       });
       if (!res.ok) {
         if (res.status === 400) {
@@ -64,11 +64,10 @@ export function useUpdateMatch() {
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: number } & Partial<InsertMatch>) => {
       const url = buildUrl(api.matches.update.path, { id });
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: api.matches.update.method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
-        credentials: "include",
       });
       if (!res.ok) throw new Error('Failed to update match');
       return api.matches.update.responses[200].parse(await res.json());
@@ -84,7 +83,7 @@ export function useMatchGoals(matchId: number) {
     queryKey: [api.goals.list.path, matchId],
     queryFn: async () => {
       const url = buildUrl(api.goals.list.path, { matchId });
-      const res = await fetch(url, { credentials: "include" });
+      const res = await apiFetch(url);
       if (!res.ok) throw new Error('Failed to fetch goals');
       return api.goals.list.responses[200].parse(await res.json());
     },
@@ -97,11 +96,10 @@ export function useCreateGoal() {
   return useMutation({
     mutationFn: async (data: InsertGoal) => {
       const validated = api.goals.create.input.parse(data);
-      const res = await fetch(api.goals.create.path, {
+      const res = await apiFetch(api.goals.create.path, {
         method: api.goals.create.method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(validated),
-        credentials: "include",
       });
       if (!res.ok) throw new Error('Failed to add goal');
       return api.goals.create.responses[201].parse(await res.json());

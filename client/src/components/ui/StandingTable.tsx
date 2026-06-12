@@ -2,7 +2,7 @@ import { useStandings } from "@/hooks/use-standings";
 
 interface StandingTableProps {
   title?: string;
-  tournamentId?: number;
+  tournamentId: number;
 }
 
 export default function StandingsTable({ title, tournamentId }: StandingTableProps) {
@@ -53,6 +53,13 @@ export default function StandingsTable({ title, tournamentId }: StandingTablePro
               </td>
             </tr>
           ))}
+          {standings.length === 0 && (
+            <tr className="border-t">
+              <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
+                No hay equipos inscritos en este torneo.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

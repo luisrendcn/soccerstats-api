@@ -1,7 +1,7 @@
 import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 export const teams = pgTable("teams", {
   id: serial("id").primaryKey(),

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { insertTeamSchema, insertPlayerSchema, insertMatchSchema, insertGoalSchema, teams, players, matches, goals } from './schema';
 
 export const errorSchemas = {

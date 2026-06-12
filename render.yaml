@@ -4,16 +4,19 @@ services:
     runtime: node
     region: oregon
     plan: free
-    # Install production deps first to avoid compiling native dev modules (like better-sqlite3),
-    # then install minimal build tools required to run the build.
-    # Install production deps, install minimal build tools, and run tsx from local bin
-    buildCommand: npm ci --omit=dev --no-audit && npm install --no-save tsx vite esbuild typescript && ./node_modules/.bin/tsx script/build.ts
+    buildCommand: npm ci --include=dev --no-audit && npm run check && npm run build
     startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_ENV
         value: production
         scope: run_and_build
       - key: DATABASE_URL
         sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: API_ORIGINS
+        value: https://localhost,capacitor://localhost
       - key: PORT
         value: 10000

@@ -1,15 +1,14 @@
 import { useState } from "react";
-import { useMatches, useCreateMatch } from "@/hooks/use-matches";
+import { useMatches } from "@/hooks/use-matches";
 import { useAuth } from "@/hooks/use-auth";
 import { useTeams } from "@/hooks/use-teams";
 import { api } from "@shared/routes";
 import { Layout } from "@/components/Layout";
 import { MatchCard } from "@/components/MatchCard";
-import { Loader2, Plus, Trash } from "lucide-react";
-import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
+import { Loader2, Trash } from "lucide-react";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 
 export default function Matches() {
   const { t } = useLanguage();
@@ -24,8 +23,6 @@ export default function Matches() {
   const [filter, setFilter] = useState<'all' | 'scheduled' | 'finished'>('all');
   const { data: auth } = useAuth();
   const isPublic = auth?.userRole === 'public';
-  const canCreateMatch = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager';
-
   const isLoading = matchesLoading || teamsLoading;
 
   if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
@@ -72,7 +69,8 @@ export default function Matches() {
             {!isPublic && (
               <button title="Delete match" className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
                 if (!confirm('Delete this match?')) return;
-                await fetch(`/api/matches/${match.id}`, { method: 'DELETE', credentials: 'include' });
+                const response = await apiFetch(`/api/matches/${match.id}`, { method: "DELETE" });
+                if (!response.ok) throw new Error("Failed to delete match");
                 queryClient.invalidateQueries({ queryKey: [api.matches.list.path] });
               }}>
                 <Trash className="w-4 h-4 text-red-600" />
@@ -83,12 +81,10 @@ export default function Matches() {
 
         {filteredMatches?.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-muted-foreground mb-4">{t('noMatches')}</p>
-            {canCreateMatch && (
-              <Link href="/matches/new">
-                <Button>{t('scheduleAMatch')}</Button>
-              </Link>
-            )}
+            <p className="text-muted-foreground">{t('noMatches')}</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Los partidos nuevos se programan desde el torneo correspondiente.
+            </p>
           </div>
         )}
       </div>

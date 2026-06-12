@@ -51,8 +51,7 @@ export default function Register() {
     try {
       await register.mutateAsync({ email, name, password, confirmPassword });
       toast({ title: "✓ Cuenta creada", description: "Serás redirigido automáticamente..." });
-      // Dar un pequeño delay para que se muestre el toast antes de navegar
-      setTimeout(() => setLocation("/"), 800);
+      setLocation("/");
     } catch (error) {
       toast({
         variant: "destructive",

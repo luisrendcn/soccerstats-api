@@ -1,18 +1,24 @@
 import { format } from "date-fns";
 import { Link } from "wouter";
-import { Team, Match } from "@shared/schema";
+import { Team, Match, Tournament } from "@shared/schema";
 
 type MatchWithTeams = Match & {
   homeTeam?: Team;
   awayTeam?: Team;
+  tournament?: Tournament;
 };
 
 interface MatchCardProps {
   match: MatchWithTeams;
   showDate?: boolean;
+  showTournament?: boolean;
 }
 
-export function MatchCard({ match, showDate = true }: MatchCardProps) {
+export function MatchCard({
+  match,
+  showDate = true,
+  showTournament = false,
+}: MatchCardProps) {
   const isFinished = match.status === "finished";
 
   return (
@@ -24,8 +30,15 @@ export function MatchCard({ match, showDate = true }: MatchCardProps) {
         <div className="p-4 pl-6">
           {showDate && (
             <div className="mb-3 flex justify-between items-center text-xs text-muted-foreground font-mono">
-              <span>{format(new Date(match.date), "EEE, MMM d • HH:mm")}</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isFinished ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'}`}>
+              <div className="flex min-w-0 items-center gap-2">
+                <span>{format(new Date(match.date), "EEE, MMM d • HH:mm")}</span>
+                {showTournament && (
+                  <span className="truncate rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                    {match.tournament?.name || "Sin torneo asignado"}
+                  </span>
+                )}
+              </div>
+              <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isFinished ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'}`}>
                 {match.status}
               </span>
             </div>

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Tournament, CreateTournamentInput, UpdateTournamentInput, Team } from "@shared/schema";
+import type { Tournament, CreateTournamentInput, UpdateTournamentInput, Team, InsertTeam } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
 
 export function useTournaments() {
@@ -109,6 +109,29 @@ export function useAddTeamToTournament() {
     },
     onSuccess: (_, { tournamentId }) => {
       queryClient.invalidateQueries({ queryKey: ["tournaments", tournamentId, "teams"] });
+    },
+  });
+}
+
+export function useCreateTournamentTeam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ tournamentId, team }: { tournamentId: number; team: InsertTeam }) => {
+      const res = await apiFetch(`/api/tournaments/${tournamentId}/teams/new`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(team),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to create tournament team");
+      }
+      return res.json() as Promise<Team>;
+    },
+    onSuccess: (_, { tournamentId }) => {
+      queryClient.invalidateQueries({ queryKey: ["tournaments", tournamentId, "teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
     },
   });
 }

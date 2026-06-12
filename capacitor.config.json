@@ -6,11 +6,11 @@
   "server": {
     "androidScheme": "https"
   },
-  "android": {
-    "allowMixedContent": true
-  },
   "plugins": {
-    "CapacitorHTTP": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "CapacitorCookies": {
       "enabled": true
     }
   }

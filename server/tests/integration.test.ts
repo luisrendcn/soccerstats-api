@@ -1,7 +1,6 @@
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import express from 'express';
 import session from 'express-session';
-import MemoryStore from 'memorystore';
 import { createServer } from 'http';
 import request from 'supertest';
 
@@ -12,6 +11,7 @@ vi.mock('../storage', () => {
     getTeam: async (id: number) => ({ id, name: 'Team A', color: '#000000' }),
     createTeam: async (team: any) => ({ id: 2, ...team }),
     getPlayers: async (teamId?: number) => (teamId ? [{ id: 1, teamId, name: 'P1', number: 9 }] : [{ id: 1, teamId: 1, name: 'P1', number: 9 }]),
+    getPlayer: async (id: number) => ({ id, teamId: 1, name: 'P1', number: 9 }),
     createPlayer: async (p: any) => ({ id: 2, ...p }),
     getMatches: async () => [],
     getMatch: async (id: number) => undefined,
@@ -22,14 +22,14 @@ vi.mock('../storage', () => {
     softDeleteMatch: async (id: number) => ({ id }),
     getGoals: async () => [],
     createGoal: async (g: any) => ({ id: 1, ...g }),
-    getStandings: async (tournamentId?: number) => [],
+    getStandings: async (_tournamentId: number) => [],
     getUserByEmail: async () => undefined,
     createUser: async (u: any) => ({ id: 1, ...u }),
     getAllUsers: async () => [],
     updateUser: async (id: number, updates: any) => ({ id, ...updates }),
     deleteUser: async () => {},
     getTournaments: async () => [],
-    getTournamentById: async () => undefined,
+    getTournamentById: async (id: number) => ({ id, name: `Tournament ${id}` }),
     createTournament: async (t: any) => ({ id: 1, ...t }),
     updateTournament: async (id: number, updates: any) => ({ id, ...updates }),
     deleteTournament: async () => {},
@@ -63,11 +63,8 @@ function buildApp(role?: string, teamId?: number | null) {
   );
   instance.use(express.urlencoded({ extended: false }));
 
-  const MemoryStoreClass = MemoryStore(session);
-  const sessionStore = new MemoryStoreClass({});
   instance.use(
     session({
-      store: sessionStore,
       secret: 'test-secret',
       resave: false,
       saveUninitialized: false,
@@ -123,6 +120,27 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     const res = await request(app).get('/api/standings?tournamentId=42');
     expect(res.status).toBe(200);
     expect(spy).toHaveBeenCalledWith(42);
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('allows the public role to read tournament standings', async () => {
+    const publicApp = buildApp('public');
+    vi.spyOn(auth, 'hasPermission').mockImplementation(
+      (role, resource, action) =>
+        role === 'public' && resource === 'tournaments' && action === 'read',
+    );
+
+    const res = await request(publicApp).get('/api/standings?tournamentId=42');
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('requires a tournament when requesting standings', async () => {
+    const res = await request(app).get('/api/standings');
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('tournamentId');
   });
 
   it('can create a player (permission mocked)', async () => {
@@ -172,6 +190,63 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     const res = await request(app).get('/api/matches');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('creates a team inside a tournament and enrolls it immediately', async () => {
+    const createTeam = vi.spyOn(storage, 'createTeam');
+    const enrollTeam = vi.spyOn(storage, 'addTeamToTournament');
+
+    const res = await request(app)
+      .post('/api/tournaments/42/teams/new')
+      .send({ name: 'Tournament Team', color: '#123456' });
+
+    expect(res.status).toBe(201);
+    expect(createTeam).toHaveBeenCalledWith(expect.objectContaining({ name: 'Tournament Team' }));
+    expect(enrollTeam).toHaveBeenCalledWith(42, 2);
+  });
+
+  it('creates matches only with teams enrolled in the tournament', async () => {
+    vi.spyOn(storage, 'getTournamentTeams').mockResolvedValueOnce([
+      { id: 1, name: 'Team A' },
+      { id: 2, name: 'Team B' },
+    ] as any);
+
+    const valid = await request(app).post('/api/matches').send({
+      tournamentId: 42,
+      homeTeamId: 1,
+      awayTeamId: 2,
+      date: new Date().toISOString(),
+    });
+    expect(valid.status).toBe(201);
+
+    vi.spyOn(storage, 'getTournamentTeams').mockResolvedValueOnce([
+      { id: 1, name: 'Team A' },
+    ] as any);
+    const invalid = await request(app).post('/api/matches').send({
+      tournamentId: 42,
+      homeTeamId: 1,
+      awayTeamId: 3,
+      date: new Date().toISOString(),
+    });
+    expect(invalid.status).toBe(400);
+  });
+
+  it('rejects goals for a team that is not in the match', async () => {
+    vi.spyOn(storage, 'getMatch').mockResolvedValueOnce({
+      id: 9,
+      homeTeamId: 1,
+      awayTeamId: 2,
+      homeScore: 0,
+      awayScore: 0,
+    } as any);
+    const createGoal = vi.spyOn(storage, 'createGoal');
+
+    const res = await request(app)
+      .post('/api/goals')
+      .send({ matchId: 9, teamId: 3, minute: 10 });
+
+    expect(res.status).toBe(400);
+    expect(createGoal).not.toHaveBeenCalled();
   });
 });
 

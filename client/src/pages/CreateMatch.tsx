@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useTeams } from "@/hooks/use-teams";
+import { useTournament, useTournamentTeams } from "@/hooks/use-tournaments";
 import { useCreateMatch } from "@/hooks/use-matches";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 
-export default function CreateMatch() {
+interface CreateMatchProps {
+  tournamentId: number;
+}
+
+export default function CreateMatch({ tournamentId }: CreateMatchProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { data: teamsResp, isLoading } = useTeams();
-  const teams = teamsResp;
+  const { data: tournament, isLoading: tournamentLoading } = useTournament(tournamentId);
   const createMatch = useCreateMatch();
 
   const [homeTeamId, setHomeTeamId] = useState<string>("");
@@ -22,6 +25,10 @@ export default function CreateMatch() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [locationName, setLocationName] = useState("");
+  const {
+    data: tournamentTeams,
+    isLoading: tournamentTeamsLoading,
+  } = useTournamentTeams(tournamentId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +47,7 @@ export default function CreateMatch() {
       const dateTime = new Date(`${date}T${time}`);
       
       await createMatch.mutateAsync({
+        tournamentId,
         homeTeamId: parseInt(homeTeamId),
         awayTeamId: parseInt(awayTeamId),
         date: dateTime,
@@ -48,18 +56,22 @@ export default function CreateMatch() {
       });
       
       toast({ title: "Match Scheduled!", description: "The match has been successfully created." });
-      setLocation("/matches");
+      setLocation(`/tournaments/${tournamentId}`);
     } catch (err) {
       toast({ variant: "destructive", title: "Error", description: (err as Error).message });
     }
   };
 
-  if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
+  if (tournamentLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
-    <Layout title="New Match" showBack>
+    <Layout title={`Nuevo Partido - ${tournament?.name || "Torneo"}`} showBack>
       <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto">
         <div className="bg-card p-6 rounded-xl border border-border shadow-sm space-y-4">
+          <div className="space-y-1">
+            <Label>Torneo</Label>
+            <p className="font-semibold">{tournament?.name}</p>
+          </div>
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -69,7 +81,7 @@ export default function CreateMatch() {
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teams?.map((team: any) => (
+                  {tournamentTeams?.map((team) => (
                     <SelectItem key={team.id} value={String(team.id)}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -83,13 +95,22 @@ export default function CreateMatch() {
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
-                  {teams?.map((team: any) => (
+                  {tournamentTeams?.map((team) => (
                     <SelectItem key={team.id} value={String(team.id)}>{team.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
+
+          {tournamentTeamsLoading && (
+            <p className="text-sm text-muted-foreground">Cargando equipos del torneo...</p>
+          )}
+          {!tournamentTeamsLoading && tournamentTeams?.length === 0 && (
+            <p className="text-sm text-destructive">
+              Este torneo todavía no tiene equipos inscritos.
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -113,7 +134,12 @@ export default function CreateMatch() {
 
         </div>
 
-        <Button type="submit" size="lg" className="w-full font-bold text-lg h-12 shadow-lg shadow-primary/20" disabled={createMatch.isPending}>
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full font-bold text-lg h-12 shadow-lg shadow-primary/20"
+          disabled={createMatch.isPending || (tournamentTeams?.length || 0) < 2}
+        >
           {createMatch.isPending ? "Scheduling..." : "Create Match"}
         </Button>
       </form>

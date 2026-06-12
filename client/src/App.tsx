@@ -30,10 +30,10 @@ function Router() {
       <Route path="/teams" component={() => <ProtectedRoute component={Teams} />} />
       <Route path="/teams/:id" component={() => <ProtectedRoute component={TeamDetails} />} />
       <Route path="/matches" component={() => <ProtectedRoute component={Matches} />} />
-      <Route path="/matches/new" component={() => <ProtectedRoute component={CreateMatch} />} />
       <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchDetails} />} />
       <Route path="/tournaments" component={() => <ProtectedRoute component={Tournaments} />} />
       <Route path="/tournaments/new" component={() => <ProtectedRoute component={CreateTournament} />} />
+      <Route path="/tournaments/:id/matches/new" component={({ params }) => <ProtectedRoute component={() => <CreateMatch tournamentId={Number(params.id)} />} />} />
       <Route path="/tournaments/:id" component={({ params }) => <ProtectedRoute component={() => <TournamentDetails tournamentId={Number(params.id)} />} />} />
       <Route path="/admin/users" component={() => <ProtectedRoute component={AdminUsers} requiredRole="admin" />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />

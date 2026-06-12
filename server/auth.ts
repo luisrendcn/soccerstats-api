@@ -1,25 +1,61 @@
 import crypto from "crypto";
 
-/**
- * Hash de contraseña usando PBKDF2
- */
+const SCRYPT_COST = 16384;
+const SCRYPT_BLOCK_SIZE = 8;
+const SCRYPT_PARALLELIZATION = 1;
+const KEY_LENGTH = 64;
+
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto
-    .pbkdf2Sync(password, salt, 1000, 64, "sha512")
-    .toString("hex");
-  return `${salt}:${hash}`;
+  const hash = crypto.scryptSync(password, salt, KEY_LENGTH, {
+    N: SCRYPT_COST,
+    r: SCRYPT_BLOCK_SIZE,
+    p: SCRYPT_PARALLELIZATION,
+  });
+
+  return [
+    "scrypt",
+    SCRYPT_COST,
+    SCRYPT_BLOCK_SIZE,
+    SCRYPT_PARALLELIZATION,
+    salt,
+    hash.toString("hex"),
+  ].join("$");
 }
 
-/**
- * Verificar contraseña contra hash
- */
 export function verifyPassword(password: string, hashedPassword: string): boolean {
-  const [salt, hash] = hashedPassword.split(":");
-  const testHash = crypto
-    .pbkdf2Sync(password, salt, 1000, 64, "sha512")
-    .toString("hex");
-  return hash === testHash;
+  try {
+    if (hashedPassword.startsWith("scrypt$")) {
+      const [, cost, blockSize, parallelization, salt, hashHex] =
+        hashedPassword.split("$");
+      const storedHash = Buffer.from(hashHex, "hex");
+      const testHash = crypto.scryptSync(password, salt, storedHash.length, {
+        N: Number(cost),
+        r: Number(blockSize),
+        p: Number(parallelization),
+      });
+      return crypto.timingSafeEqual(storedHash, testHash);
+    }
+
+    // Backward compatibility for hashes created by older releases.
+    const [salt, hashHex] = hashedPassword.split(":");
+    if (!salt || !hashHex) return false;
+    const storedHash = Buffer.from(hashHex, "hex");
+    const testHash = crypto.pbkdf2Sync(
+      password,
+      salt,
+      1000,
+      storedHash.length,
+      "sha512",
+    );
+    return crypto.timingSafeEqual(storedHash, testHash);
+  } catch {
+    return false;
+  }
+}
+
+export function passwordNeedsRehash(hashedPassword: string): boolean {
+  return !hashedPassword.startsWith("scrypt$");
 }
 
 /**

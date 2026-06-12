@@ -22,23 +22,11 @@ import {
   type TournamentTeam,
 } from "@shared/schema";
 import { eq, desc, isNull, and } from "drizzle-orm";
+import { calculateStandings, type Standing } from "./standings";
 
 /* =======================
    TYPES
 ======================= */
-
-export interface Standing {
-  teamId: number;
-  teamName: string;
-  played: number;
-  wins: number;
-  draws: number;
-  losses: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  goalDifference: number;
-  points: number;
-}
 
 export interface IStorage {
   // Teams
@@ -66,7 +54,7 @@ export interface IStorage {
   createGoal(goal: InsertGoal): Promise<Goal>;
 
   // Standings
-  getStandings(tournamentId?: number): Promise<Standing[]>;
+  getStandings(tournamentId: number): Promise<Standing[]>;
 
   // Users
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -97,7 +85,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTeam(id: number): Promise<Team | undefined> {
-    const [team] = await db.select().from(teams).where(eq(teams.id, id));
+    const [team] = await db
+      .select()
+      .from(teams)
+      .where(and(eq(teams.id, id), isNull(teams.deletedAt)));
     return team;
   }
 
@@ -111,16 +102,16 @@ export class DatabaseStorage implements IStorage {
   ======================= */
 
   async getPlayers(teamId?: number): Promise<Player[]> {
-    let q: any = db.select().from(players);
-    q = q.where(isNull(players.deletedAt));
-    if (typeof teamId === "number") {
-      q = q.where(eq(players.teamId, teamId));
-    }
-    return q;
+    const conditions = [isNull(players.deletedAt)];
+    if (typeof teamId === "number") conditions.push(eq(players.teamId, teamId));
+    return db.select().from(players).where(and(...conditions));
   }
 
   async getPlayer(id: number): Promise<Player | undefined> {
-    const [player] = await db.select().from(players).where(eq(players.id, id));
+    const [player] = await db
+      .select()
+      .from(players)
+      .where(and(eq(players.id, id), isNull(players.deletedAt)));
     return player;
   }
 
@@ -194,80 +185,19 @@ export class DatabaseStorage implements IStorage {
      STANDINGS
   ======================= */
 
-  async getStandings(tournamentId?: number): Promise<Standing[]> {
-    const allTeams = await this.getTeams();
-    let finishedMatchesQuery = db
+  async getStandings(tournamentId: number): Promise<Standing[]> {
+    const tournamentParticipants = await this.getTournamentTeams(tournamentId);
+    const conditions = [
+      eq(matches.status, "finished"),
+      isNull(matches.deletedAt),
+      eq(matches.tournamentId, tournamentId),
+    ];
+    const finishedMatches = await db
       .select()
       .from(matches)
-      .where(eq(matches.status, "finished"));
-    if (tournamentId !== undefined) {
-      finishedMatchesQuery = finishedMatchesQuery.where(eq(matches.tournamentId, tournamentId));
-    }
-    const finishedMatches = await finishedMatchesQuery;
+      .where(and(...conditions));
 
-    const table: Record<number, Standing> = {};
-
-    // Initialize table
-    for (const team of allTeams) {
-      table[team.id] = {
-        teamId: team.id,
-        teamName: team.name,
-        played: 0,
-        wins: 0,
-        draws: 0,
-        losses: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        goalDifference: 0,
-        points: 0,
-      };
-    }
-
-    for (const match of finishedMatches) {
-      // skip invalid records
-      if (match.homeTeamId == null || match.awayTeamId == null) continue;
-      const home = table[match.homeTeamId];
-      const away = table[match.awayTeamId];
-      if (!home || !away) continue;
-
-      home.played++;
-      away.played++;
-
-      const homeGoals = match.homeScore ?? 0;
-      const awayGoals = match.awayScore ?? 0;
-
-      home.goalsFor += homeGoals;
-      home.goalsAgainst += awayGoals;
-      away.goalsFor += awayGoals;
-      away.goalsAgainst += homeGoals;
-
-      if (homeGoals > awayGoals) {
-        home.wins++;
-        home.points += 3;
-        away.losses++;
-      } else if (awayGoals > homeGoals) {
-        away.wins++;
-        away.points += 3;
-        home.losses++;
-      } else {
-        home.draws++;
-        away.draws++;
-        home.points += 1;
-        away.points += 1;
-      }
-    }
-
-    return Object.values(table)
-      .map((t) => ({
-        ...t,
-        goalDifference: t.goalsFor - t.goalsAgainst,
-      }))
-      .sort(
-        (a, b) =>
-          b.points - a.points ||
-          b.goalDifference - a.goalDifference ||
-          b.goalsFor - a.goalsFor
-      );
+    return calculateStandings(tournamentParticipants, finishedMatches);
   }
 
   /* =======================
@@ -315,7 +245,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTournamentById(id: number): Promise<Tournament | undefined> {
-    const [tournament] = await db.select().from(tournaments).where(eq(tournaments.id, id));
+    const [tournament] = await db
+      .select()
+      .from(tournaments)
+      .where(and(eq(tournaments.id, id), isNull(tournaments.deletedAt)));
     return tournament;
   }
 

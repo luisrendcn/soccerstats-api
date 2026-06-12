@@ -1,4 +1,10 @@
-import { useTournament, useTournamentTeams, useAddTeamToTournament, useRemoveTeamFromTournament } from "@/hooks/use-tournaments";
+import {
+  useTournament,
+  useTournamentTeams,
+  useAddTeamToTournament,
+  useCreateTournamentTeam,
+  useRemoveTeamFromTournament,
+} from "@/hooks/use-tournaments";
 import { useTeams } from "@/hooks/use-teams";
 import { useLocation } from "wouter";
 import { TeamColorCircleSmall } from "@/components/TeamColor";
@@ -25,6 +31,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import StandingsTable from "@/components/ui/StandingTable";
 
 interface TournamentDetailsProps {
@@ -49,10 +64,39 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const { data: tournamentTeams, isLoading: tournamentTeamsLoading } = useTournamentTeams(tournamentId);
   
   const addTeam = useAddTeamToTournament();
+  const createTeam = useCreateTournamentTeam();
   const removeTeam = useRemoveTeamFromTournament();
   
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [removingTeamId, setRemovingTeamId] = useState<number | null>(null);
+  const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamColor, setNewTeamColor] = useState("#000000");
+
+  const handleCreateTeam = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newTeamName.trim()) return;
+
+    try {
+      await createTeam.mutateAsync({
+        tournamentId,
+        team: {
+          name: newTeamName.trim(),
+          color: newTeamColor,
+        },
+      });
+      setNewTeamName("");
+      setNewTeamColor("#000000");
+      setIsCreateTeamOpen(false);
+      toast({ title: "✓ Equipo creado e inscrito en el torneo" });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: (error as Error).message,
+      });
+    }
+  };
 
   const handleAddTeam = async () => {
     if (!selectedTeamId) {
@@ -181,8 +225,72 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
       </Card>
 
       <div className="space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
           <h2 className="text-2xl font-bold">Equipos Participantes</h2>
+          {canManageTournaments && (
+            <div className="flex gap-2">
+              <Dialog open={isCreateTeamOpen} onOpenChange={setIsCreateTeamOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Nuevo Equipo
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Nuevo equipo para {tournament.name}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleCreateTeam} className="space-y-4 mt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="tournament-team-name">Nombre del equipo</Label>
+                      <Input
+                        id="tournament-team-name"
+                        value={newTeamName}
+                        onChange={(event) => setNewTeamName(event.target.value)}
+                        placeholder="Nombre del equipo"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="tournament-team-color">Color</Label>
+                      <div className="flex gap-3 items-center">
+                        <Input
+                          id="tournament-team-color"
+                          type="color"
+                          value={newTeamColor}
+                          onChange={(event) => setNewTeamColor(event.target.value)}
+                          className="w-14 h-12 p-1 cursor-pointer"
+                        />
+                        <span className="text-sm font-mono text-muted-foreground">
+                          {newTeamColor}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={createTeam.isPending || !newTeamName.trim()}
+                    >
+                      {createTeam.isPending ? "Creando..." : "Crear e inscribir equipo"}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+              <Button
+                size="sm"
+                onClick={() => setLocation(`/tournaments/${tournamentId}/matches/new`)}
+                disabled={(tournamentTeams?.length || 0) < 2}
+                title={
+                  (tournamentTeams?.length || 0) < 2
+                    ? "Se necesitan al menos dos equipos inscritos"
+                    : "Programar partido"
+                }
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Nuevo Partido
+              </Button>
+            </div>
+          )}
         </div>
 
         {(teamsLoading || tournamentTeamsLoading) && (

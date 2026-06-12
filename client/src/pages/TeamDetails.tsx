@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { apiFetch } from "@/lib/api";
 
 export default function TeamDetails() {
   const [match, params] = useRoute("/teams/:id");
@@ -120,7 +121,8 @@ export default function TeamDetails() {
               {canManagePlayers && (
                 <button title={`Remove player ${player.name}`} className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
                   if (!confirm(`Remove player ${player.name}?`)) return;
-                  await fetch(`/api/players/${player.id}`, { method: 'DELETE', credentials: 'include' });
+                  const response = await apiFetch(`/api/players/${player.id}`, { method: "DELETE" });
+                  if (!response.ok) throw new Error("Failed to remove player");
                   // refetch players by invalidating query
                   queryClient.invalidateQueries({ queryKey: [api.players.list.path, teamId] });
                 }}>

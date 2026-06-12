@@ -41,7 +41,11 @@ export function useLogin() {
     },
     onSuccess: (user) => {
       // immediately seed auth cache
-      queryClient.setQueryData(["auth", "me"], { userId: user.id, userRole: user.role });
+      queryClient.setQueryData(["auth", "me"], {
+        userId: user.id,
+        userRole: user.role,
+        teamId: user.teamId ?? null,
+      });
       queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
     },
   });
@@ -64,8 +68,13 @@ export function useRegister() {
       return res.json() as Promise<AuthResponse>;
     },
     onSuccess: (user) => {
-      queryClient.setQueryData(["auth", "me"], { userId: user.id, userRole: user.role });
-      queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+      queryClient.setQueryData(["auth", "me"], {
+        userId: user.id,
+        userRole: user.role,
+        teamId: user.teamId ?? null,
+      });
+      queryClient.setQueryData(["auth", "me"], null);
+      queryClient.clear();
     },
   });
 }

@@ -22,8 +22,7 @@ export default function Login() {
     try {
       await login.mutateAsync({ email, password });
       toast({ title: "✓ Bienvenido", description: "Iniciaste sesión exitosamente." });
-      // Dar un pequeño delay para que se muestre el toast antes de navegar
-      setTimeout(() => setLocation("/"), 800);
+      setLocation("/");
     } catch (error) {
       toast({
         variant: "destructive",

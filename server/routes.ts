@@ -1,10 +1,39 @@
 import type { Express } from "express";
 import type { Server } from "http";
+import type { Request } from "express";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { hashPassword, verifyPassword, hasPermission } from "./auth";
+import {
+  hashPassword,
+  verifyPassword,
+  passwordNeedsRehash,
+  hasPermission,
+} from "./auth";
 import { loginSchema, registerSchema, createTournamentSchema, updateTournamentSchema } from "@shared/schema";
-import { z } from "zod";
+import { z } from "zod/v4";
+
+const userRoleSchema = z.enum([
+  "admin",
+  "tournament_manager",
+  "team",
+  "referee",
+  "public",
+]);
+
+async function establishSession(
+  req: Request,
+  user: { id: number; role: string; teamId?: number | null },
+) {
+  await new Promise<void>((resolve, reject) => {
+    req.session.regenerate((error) => (error ? reject(error) : resolve()));
+  });
+  (req.session as any).userId = user.id;
+  (req.session as any).userRole = user.role;
+  (req.session as any).teamId = user.teamId ?? null;
+  await new Promise<void>((resolve, reject) => {
+    req.session.save((error) => (error ? reject(error) : resolve()));
+  });
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -33,25 +62,17 @@ export async function registerRoutes(
         role: "public",
       });
 
-      // Sesión
-      (req.session as any).userId = user.id;
-      (req.session as any).userRole = user.role;
-
-      // Guardar sesión explícitamente
-      req.session.save((err) => {
-        if (err) {
-          return res.status(500).json({ message: "Error al guardar sesión" });
-        }
-        res.status(201).json({ 
-          id: user.id, 
-          email: user.email, 
-          name: user.name, 
-          role: user.role 
-        });
+      await establishSession(req, user);
+      res.status(201).json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        teamId: user.teamId ?? null,
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
@@ -70,27 +91,23 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Usuario inactivo" });
       }
 
-      // Sesión
-      (req.session as any).userId = user.id;
-      (req.session as any).userRole = user.role;
-      (req.session as any).teamId = user.teamId || null;
-
-      // Guardar sesión explícitamente
-      req.session.save((err) => {
-        if (err) {
-          return res.status(500).json({ message: "Error al guardar sesión" });
-        }
-        res.json({ 
-          id: user.id, 
-          email: user.email, 
-          name: user.name, 
-          role: user.role,
-          teamId: user.teamId || null,
+      if (passwordNeedsRehash(user.password)) {
+        await storage.updateUser(user.id, {
+          password: hashPassword(input.password),
         });
+      }
+
+      await establishSession(req, user);
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        teamId: user.teamId ?? null,
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
@@ -101,6 +118,7 @@ export async function registerRoutes(
       if (err) {
         return res.status(500).json({ message: "Error al cerrar sesión" });
       }
+      res.clearCookie("soccer.sid");
       res.json({ message: "Sesión cerrada" });
     });
   });
@@ -122,6 +140,9 @@ export async function registerRoutes(
 
   // Middleware para verificar rol admin
   const requireAdmin = (req: any, res: any, next: any) => {
+    if (!(req.session as any).userRole) {
+      return res.status(401).json({ message: "No autenticado" });
+    }
     if ((req.session as any).userRole !== "admin") {
       return res.status(403).json({ message: "Acceso denegado. Se requiere rol admin." });
     }
@@ -156,7 +177,7 @@ export async function registerRoutes(
   app.post("/api/admin/users", requireAdmin, async (req, res) => {
     try {
       // Validate input fields
-      const { email, password, name, role } = req.body;
+      const { email, password, name } = req.body;
       
       if (!email || !password || !name) {
         return res.status(400).json({ message: "Email, contraseña y nombre son requeridos" });
@@ -169,15 +190,19 @@ export async function registerRoutes(
       const validEmail = emailSchema.safeParse(email);
       const validPassword = passwordSchema.safeParse(password);
       const validName = nameSchema.safeParse(name);
+      const validRole = userRoleSchema.safeParse(req.body.role || "public");
       
       if (!validEmail.success) {
-        return res.status(400).json({ message: validEmail.error.errors[0].message });
+        return res.status(400).json({ message: validEmail.error.issues[0].message });
       }
       if (!validPassword.success) {
-        return res.status(400).json({ message: validPassword.error.errors[0].message });
+        return res.status(400).json({ message: validPassword.error.issues[0].message });
       }
       if (!validName.success) {
-        return res.status(400).json({ message: validName.error.errors[0].message });
+        return res.status(400).json({ message: validName.error.issues[0].message });
+      }
+      if (!validRole.success) {
+        return res.status(400).json({ message: "Rol inválido" });
       }
       
       // Verificar si el usuario ya existe
@@ -190,15 +215,15 @@ export async function registerRoutes(
         email: email,
         password: hashPassword(password),
         name: name,
-        role: role || "public",
-        teamId: req.body.teamId || null,
+        role: validRole.data,
+        teamId: req.body.teamId ?? null,
       });
 
       const { password: _, ...safeUser } = user;
       res.status(201).json(safeUser);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
@@ -207,16 +232,19 @@ export async function registerRoutes(
   app.put("/api/admin/users/:id", requireAdmin, async (req, res) => {
     try {
       const userId = Number(req.params.id);
-      const { role, teamId, isActive, name, email } = req.body;
-
-      const updates: any = {};
-      if (name) updates.name = name;
-      if (email) updates.email = email;
-      if (role) updates.role = role;
-      if (teamId !== undefined) updates.teamId = teamId;
-      if (isActive !== undefined) updates.isActive = isActive;
+      const updateSchema = z
+        .object({
+          role: userRoleSchema.optional(),
+          teamId: z.number().int().positive().nullable().optional(),
+          isActive: z.boolean().optional(),
+          name: z.string().min(1).optional(),
+          email: z.string().email().optional(),
+        })
+        .strict();
+      const updates = updateSchema.parse(req.body);
 
       const user = await storage.updateUser(userId, updates);
+      if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
       const { password, ...safeUser } = user;
       res.json(safeUser);
     } catch (err) {
@@ -245,11 +273,12 @@ export async function registerRoutes(
       const userId = Number(req.params.id);
       const { role } = req.body;
 
-      if (!["admin", "tournament_manager", "team", "referee", "public"].includes(role)) {
+      const parsedRole = userRoleSchema.safeParse(role);
+      if (!parsedRole.success) {
         return res.status(400).json({ message: "Rol inválido" });
       }
 
-      const user = await storage.updateUser(userId, { role });
+      const user = await storage.updateUser(userId, { role: parsedRole.data });
       const { password, ...safeUser } = user;
       res.json(safeUser);
     } catch (err) {
@@ -284,7 +313,7 @@ export async function registerRoutes(
       res.status(201).json(team);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
@@ -345,7 +374,7 @@ export async function registerRoutes(
       res.status(201).json(tournament);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
@@ -369,7 +398,7 @@ export async function registerRoutes(
       res.json(tournament);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
@@ -397,6 +426,26 @@ export async function registerRoutes(
       const relation = await storage.addTeamToTournament(tournamentId, teamId);
       res.status(201).json(relation);
     } catch (err) {
+      throw err;
+    }
+  });
+
+  app.post("/api/tournaments/:id/teams/new", requireTournamentManager, async (req, res) => {
+    try {
+      const tournamentId = Number(req.params.id);
+      const tournament = await storage.getTournamentById(tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ message: "Torneo no encontrado" });
+      }
+
+      const input = api.teams.create.input.parse(req.body);
+      const team = await storage.createTeam(input);
+      await storage.addTeamToTournament(tournamentId, team.id);
+      res.status(201).json(team);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.issues[0].message });
+      }
       throw err;
     }
   });
@@ -470,7 +519,7 @@ export async function registerRoutes(
       res.status(201).json(player);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
@@ -505,12 +554,29 @@ export async function registerRoutes(
       }
 
       const input = api.matches.create.input.parse(rawBody);
+      if (!input.tournamentId) {
+        return res.status(400).json({ message: "El torneo es requerido" });
+      }
+      const tournament = await storage.getTournamentById(input.tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ message: "Torneo no encontrado" });
+      }
+      const tournamentTeams = await storage.getTournamentTeams(input.tournamentId);
+      const participantIds = new Set(tournamentTeams.map((team) => team.id));
+      if (
+        !participantIds.has(input.homeTeamId) ||
+        !participantIds.has(input.awayTeamId)
+      ) {
+        return res.status(400).json({
+          message: "Ambos equipos deben estar inscritos en el torneo",
+        });
+      }
 
       const match = await storage.createMatch(input);
       res.status(201).json(match);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
@@ -558,7 +624,7 @@ export async function registerRoutes(
       res.json(match);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
@@ -577,37 +643,50 @@ export async function registerRoutes(
   app.post(api.goals.create.path, requirePermission("matches", "update"), async (req, res) => {
     try {
       const input = api.goals.create.input.parse(req.body);
-      const goal = await storage.createGoal(input);
-
       const match = await storage.getMatch(input.matchId);
-      if (match) {
-        const isHome = match.homeTeamId === input.teamId;
-
-        await storage.updateMatch(input.matchId, {
-          homeScore: isHome ? (match.homeScore ?? 0) + 1 : match.homeScore,
-          awayScore: !isHome ? (match.awayScore ?? 0) + 1 : match.awayScore,
-        });
+      if (!match) {
+        return res.status(404).json({ message: "Partido no encontrado" });
       }
+      if (![match.homeTeamId, match.awayTeamId].includes(input.teamId)) {
+        return res.status(400).json({ message: "El equipo no participa en este partido" });
+      }
+      if (input.playerId) {
+        const player = await storage.getPlayer(input.playerId);
+        if (!player || player.teamId !== input.teamId) {
+          return res.status(400).json({ message: "El jugador no pertenece al equipo indicado" });
+        }
+      }
+
+      const goal = await storage.createGoal(input);
+      const isHome = match.homeTeamId === input.teamId;
+      await storage.updateMatch(input.matchId, {
+        homeScore: isHome ? (match.homeScore ?? 0) + 1 : match.homeScore,
+        awayScore: isHome ? match.awayScore : (match.awayScore ?? 0) + 1,
+      });
 
       res.status(201).json(goal);
     } catch (err) {
       if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message });
+        return res.status(400).json({ message: err.issues[0].message });
       }
       throw err;
     }
   });
 
   // Standings
-  app.get("/api/standings", async (req, res) => {
-    let tId: number | undefined;
-    if (req.query.tournamentId !== undefined) {
-      const parsed = parseInt(String(req.query.tournamentId), 10);
-      if (!isNaN(parsed)) {
-        tId = parsed;
-      }
+  app.get("/api/standings", requirePermission("tournaments", "read"), async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const tournamentId = Number(req.query.tournamentId);
+    if (!Number.isInteger(tournamentId) || tournamentId <= 0) {
+      return res.status(400).json({ message: "tournamentId válido es requerido" });
     }
-    const standings = await storage.getStandings(tId);
+
+    const tournament = await storage.getTournamentById(tournamentId);
+    if (!tournament) {
+      return res.status(404).json({ message: "Torneo no encontrado" });
+    }
+
+    const standings = await storage.getStandings(tournamentId);
     res.json(standings);
   });   
 
@@ -615,22 +694,28 @@ export async function registerRoutes(
      SEED DATA
   ======================= */
 
-  // Crear usuario admin si no existe
-  const adminUser = await storage.getUserByEmail("admin@inder.gov.co");
-  if (!adminUser) {
-    await storage.createUser({
-      email: "admin@inder.gov.co",
-      name: "Administrador INDER",
-      password: hashPassword("Admin123456"),
-      role: "admin",
-      isActive: true,
-    });
-    console.log("Admin user created: admin@inder.gov.co / Admin123456");
+  const bootstrapAdminEmail = process.env.ADMIN_EMAIL;
+  const bootstrapAdminPassword = process.env.ADMIN_PASSWORD;
+  if (bootstrapAdminEmail && bootstrapAdminPassword) {
+    if (bootstrapAdminPassword.length < 12) {
+      throw new Error("ADMIN_PASSWORD must contain at least 12 characters");
+    }
+    const adminUser = await storage.getUserByEmail(bootstrapAdminEmail);
+    if (!adminUser) {
+      await storage.createUser({
+        email: bootstrapAdminEmail,
+        name: process.env.ADMIN_NAME || "Administrador",
+        password: hashPassword(bootstrapAdminPassword),
+        role: "admin",
+        isActive: true,
+      });
+      console.log(`Admin user created: ${bootstrapAdminEmail}`);
+    }
   }
 
   const existingTeams = await storage.getTeams();
 
-  if (existingTeams.length === 0) {
+  if (process.env.SEED_DEMO_DATA === "true" && existingTeams.length === 0) {
     const teamA = await storage.createTeam({ name: "Thunder FC", color: "#3b82f6" });
     const teamB = await storage.createTeam({ name: "Lightning United", color: "#ef4444" });
     const teamC = await storage.createTeam({ name: "Storm Breakers", color: "#22c55e" });

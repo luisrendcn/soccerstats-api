@@ -5,7 +5,6 @@ import 'dotenv/config';
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import express from 'express';
 import session from 'express-session';
-import MemoryStore from 'memorystore';
 import { createServer } from 'http';
 import request from 'supertest';
 import { db } from '../db';
@@ -37,11 +36,8 @@ function makeApp(role: string, teamId?: number|null) {
   );
   instance.use(express.urlencoded({ extended: false }));
 
-  const MemoryStoreClass = MemoryStore(session);
-  const sessionStore = new MemoryStoreClass({});
   instance.use(
     session({
-      store: sessionStore,
       secret: 'test-secret',
       resave: false,
       saveUninitialized: false,
@@ -96,7 +92,7 @@ afterAll(async () => {
   server.close();
 });
 
-describe('Integration with real sqlite DB', () => {
+describe.skipIf(process.env.RUN_REAL_DB_TESTS !== 'true')('Integration with real database', () => {
   it('can create and list teams', async () => {
     // list existing teams (may not be empty on shared DB)
     const initial = await request(app).get('/api/teams');
@@ -154,6 +150,9 @@ describe('Integration with real sqlite DB', () => {
       expect(tRes1.status).toBe(201);
       const firstTourId = tRes1.body.id;
       createdTournamentId = firstTourId;
+      await request(app)
+        .post(`/api/tournaments/${firstTourId}/teams`)
+        .send({ teamId: createdTeamId });
 
       const create = await request(app)
         .post('/api/matches')
@@ -186,6 +185,9 @@ describe('Integration with real sqlite DB', () => {
     const tRes2 = await request(app).post('/api/tournaments').send({ name: 'Second Tour', startDate: new Date().toISOString() });
     expect(tRes2.status).toBe(201);
     const secondTourId = tRes2.body.id;
+    await request(app)
+      .post(`/api/tournaments/${secondTourId}/teams`)
+      .send({ teamId: createdTeamId });
 
     const create2 = await request(app).post('/api/matches').send({ homeTeamId: createdTeamId, awayTeamId: createdTeamId, date: new Date().toISOString(), tournamentId: secondTourId });
     expect(create2.status).toBe(201);

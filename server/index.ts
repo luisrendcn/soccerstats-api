@@ -1,7 +1,13 @@
 import "dotenv/config";
+import "express-async-errors";
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MemoryStore from "memorystore";
+import pgSession from "connect-pg-simple";
+import pg from "pg";
+import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -10,6 +16,39 @@ import { sql } from "drizzle-orm";
 
 const app = express();
 const httpServer = createServer(app);
+const isProduction = process.env.NODE_ENV === "production";
+const useSecureCookies =
+  isProduction && process.env.COOKIE_SECURE?.toLowerCase() !== "false";
+const allowedOrigins = new Set(
+  (process.env.API_ORIGINS || "http://localhost,http://localhost:5000,http://localhost:5173,https://localhost,capacitor://localhost")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
+
+if (isProduction) {
+  app.set("trust proxy", 1);
+}
+
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use((req, res, next) => {
+  const origin = req.get("origin");
+  const requestOrigin = `${req.protocol}://${req.get("host")}`;
+  if (origin && origin !== requestOrigin && !allowedOrigins.has(origin)) {
+    return res.status(403).json({ message: "Origin not allowed" });
+  }
+  next();
+});
+app.use(
+  cors({
+    credentials: true,
+    origin: true,
+  }),
+);
+
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
 
 declare module "http" {
   interface IncomingMessage {
@@ -27,20 +66,55 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-// Configurar sesión
 const MemoryStoreClass = MemoryStore(session);
-const sessionStore = new MemoryStoreClass({});
+const sessionSecret = process.env.SESSION_SECRET;
+if (isProduction && (!sessionSecret || sessionSecret.length < 32)) {
+  throw new Error("SESSION_SECRET must contain at least 32 characters in production");
+}
+
+const sessionStore = (() => {
+  if (!isProduction) {
+    return new MemoryStoreClass({ checkPeriod: 1000 * 60 * 60 * 24 });
+  }
+
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required for production sessions");
+  }
+
+  const PgSession = pgSession(session);
+  const sessionPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  return new PgSession({
+    pool: sessionPool,
+    tableName: "user_sessions",
+    createTableIfMissing: true,
+  });
+})();
+
 app.use(
   session({
+    name: "soccer.sid",
     store: sessionStore,
-    secret: process.env.SESSION_SECRET || "your-secret-key",
+    secret: sessionSecret || "development-only-session-secret-change-me",
     resave: false,
     saveUninitialized: false,
-    cookie: { 
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 1000 * 60 * 60 * 24 // 24 horas
+    cookie: {
+      httpOnly: true,
+      secure: useSecureCookies,
+      sameSite: useSecureCookies ? "none" : "lax",
+      maxAge: 1000 * 60 * 60 * 24,
     },
-  })
+  }),
+);
+
+app.use(
+  "/api/auth/login",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { message: "Demasiados intentos. Intenta nuevamente en 15 minutos." },
+  }),
 );
 
 export function log(message: string, source = "express") {
@@ -69,7 +143,7 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      if (capturedJsonResponse && res.statusCode >= 400) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
       log(logLine);
@@ -98,11 +172,15 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const message =
+      status >= 500 && isProduction
+        ? "Internal Server Error"
+        : err.message || "Internal Server Error";
+    if (status >= 500) console.error(err);
     res.status(status).json({ message });
   });
 
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction) {
     serveStatic(app);
   } else {
     const { setupVite } = await import("./vite");
