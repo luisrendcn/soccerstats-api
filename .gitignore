@@ -10,3 +10,4 @@ testdb.mjs
 cookies.txt
 android/.idea/workspace*.xml
 android/.idea/misc-*.xml
+.tools/

@@ -1,7 +1,6 @@
 {
   "include": ["client/src/**/*", "shared/**/*", "server/**/*", "drizzle.config.ts"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
-  "files": ["server/typings.d.ts"],
   "compilerOptions": {
     "forceConsistentCasingInFileNames": true,
     "incremental": true,
