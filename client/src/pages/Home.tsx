@@ -16,19 +16,21 @@ export default function Home() {
   const teams = teamsResp;
 
   const isLoading = matchesLoading || teamsLoading || tournamentsLoading;
-  // Get recent finished matches
-  const recentMatches = matches
-    ?.filter((m: any) => m.status === "finished")
-    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  const enrichedMatches = matches
+    ?.filter((match) => match.status === "finished")
+    .map((match) => ({
+      ...match,
+      homeTeam: teams?.find((team) => team.id === match.homeTeamId),
+      awayTeam: teams?.find((team) => team.id === match.awayTeamId),
+      tournament: tournaments?.find(
+        (tournament) => tournament.id === match.tournamentId,
+      ),
+    }))
+    .filter((match) => match.homeTeam && match.awayTeam)
+    .sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    )
     .slice(0, 3);
-
-  // Enrich matches with team data
-  const enrichedMatches = recentMatches?.map((m: any) => ({
-    ...m,
-    homeTeam: teams?.find((t: any) => t.id === m.homeTeamId),
-    awayTeam: teams?.find((t: any) => t.id === m.awayTeamId),
-    tournament: tournaments?.find((tournament) => tournament.id === m.tournamentId),
-  }));
 
   if (isLoading) {
     return (
