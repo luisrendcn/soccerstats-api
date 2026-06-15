@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import type { Server } from "http";
-import type { Request } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import {
@@ -33,6 +33,13 @@ async function establishSession(
   await new Promise<void>((resolve, reject) => {
     req.session.save((error) => (error ? reject(error) : resolve()));
   });
+}
+
+async function destroySession(req: Request, res: Response) {
+  await new Promise<void>((resolve) => {
+    req.session.destroy(() => resolve());
+  });
+  res.clearCookie("soccer.sid");
 }
 
 export async function registerRoutes(
@@ -88,7 +95,10 @@ export async function registerRoutes(
       }
 
       if (!user.isActive) {
-        return res.status(403).json({ message: "Usuario inactivo" });
+        return res.status(403).json({
+          message: "Tu cuenta está bloqueada. Contacta al administrador.",
+          code: "ACCOUNT_BLOCKED",
+        });
       }
 
       if (passwordNeedsRehash(user.password)) {
@@ -123,10 +133,31 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/auth/me", (req, res) => {
-    if (!(req.session as any).userId) {
+  const requireActiveSession = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    const userId = (req.session as any).userId;
+    if (!userId) {
       return res.status(401).json({ message: "No autenticado" });
     }
+
+    const user = await storage.getUserById(userId);
+    if (!user || !user.isActive) {
+      await destroySession(req, res);
+      return res.status(403).json({
+        message: "Tu cuenta está bloqueada. Contacta al administrador.",
+        code: "ACCOUNT_BLOCKED",
+      });
+    }
+
+    (req.session as any).userRole = user.role;
+    (req.session as any).teamId = user.teamId ?? null;
+    next();
+  };
+
+  app.get("/api/auth/me", requireActiveSession, (req, res) => {
     res.json({
       userId: (req.session as any).userId,
       userRole: (req.session as any).userRole,
@@ -139,27 +170,25 @@ export async function registerRoutes(
   ======================= */
 
   // Middleware para verificar rol admin
-  const requireAdmin = (req: any, res: any, next: any) => {
-    if (!(req.session as any).userRole) {
-      return res.status(401).json({ message: "No autenticado" });
-    }
-    if ((req.session as any).userRole !== "admin") {
-      return res.status(403).json({ message: "Acceso denegado. Se requiere rol admin." });
-    }
-    next();
+  const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
+    requireActiveSession(req, res, () => {
+      if ((req.session as any).userRole !== "admin") {
+        return res.status(403).json({ message: "Acceso denegado. Se requiere rol admin." });
+      }
+      next();
+    }).catch(next);
   };
 
   // Middleware para verificar permisos basado en recurso y acción
   const requirePermission = (resource: string, action: string) => {
-    return (req: any, res: any, next: any) => {
-      const userRole = (req.session as any).userRole;
-      if (!userRole) {
-        return res.status(401).json({ message: "No autenticado" });
-      }
-      if (!hasPermission(userRole, resource, action)) {
-        return res.status(403).json({ message: `No tienes permiso para ${action} ${resource}` });
-      }
-      next();
+    return (req: Request, res: Response, next: NextFunction) => {
+      requireActiveSession(req, res, () => {
+        const userRole = (req.session as any).userRole;
+        if (!hasPermission(userRole, resource, action)) {
+          return res.status(403).json({ message: `No tienes permiso para ${action} ${resource}` });
+        }
+        next();
+      }).catch(next);
     };
   };
 
@@ -243,6 +272,13 @@ export async function registerRoutes(
         .strict();
       const updates = updateSchema.parse(req.body);
 
+      if (
+        (req.session as any).userId === userId &&
+        updates.isActive === false
+      ) {
+        return res.status(400).json({ message: "No puedes bloquearte a ti mismo" });
+      }
+
       const user = await storage.updateUser(userId, updates);
       if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
       const { password, ...safeUser } = user;
@@ -256,13 +292,15 @@ export async function registerRoutes(
     try {
       const userId = Number(req.params.id);
 
-      // Evitar que se elimine al mismo admin que está eliminando
+      // El borrado desde la interfaz bloquea la cuenta de forma reversible.
       if ((req.session as any).userId === userId) {
-        return res.status(400).json({ message: "No puedes eliminarte a ti mismo" });
+        return res.status(400).json({ message: "No puedes bloquearte a ti mismo" });
       }
 
-      await storage.deleteUser(userId);
-      res.json({ success: true });
+      const user = await storage.updateUser(userId, { isActive: false });
+      if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+      const { password, ...safeUser } = user;
+      res.json(safeUser);
     } catch (err) {
       throw err;
     }
@@ -324,11 +362,13 @@ export async function registerRoutes(
   ======================= */
 
   // Middleware para verificar tournament_manager o admin
-  const requireTournamentManager = (req: any, res: any, next: any) => {
-    if (!["admin", "tournament_manager"].includes((req.session as any).userRole)) {
-      return res.status(403).json({ message: "Acceso denegado" });
-    }
-    next();
+  const requireTournamentManager = (req: Request, res: Response, next: NextFunction) => {
+    requireActiveSession(req, res, () => {
+      if (!["admin", "tournament_manager"].includes((req.session as any).userRole)) {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+      next();
+    }).catch(next);
   };
 
   app.get("/api/tournaments", async (_req, res) => {

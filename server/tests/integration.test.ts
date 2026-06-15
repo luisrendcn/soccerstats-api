@@ -24,6 +24,24 @@ vi.mock('../storage', () => {
     createGoal: async (g: any) => ({ id: 1, ...g }),
     getStandings: async (_tournamentId: number) => [],
     getUserByEmail: async () => undefined,
+    getUserById: async (id: number) => {
+      const roleById: Record<number, string> = {
+        1: 'admin',
+        2: 'public',
+        3: 'referee',
+        4: 'tournament_manager',
+      };
+      const isTeamUser = id >= 10_000;
+      return {
+        id,
+        email: 'active@example.com',
+        password: 'unused',
+        name: 'Active User',
+        role: isTeamUser ? 'team' : roleById[id] || 'public',
+        teamId: isTeamUser ? id - 10_000 : null,
+        isActive: true,
+      };
+    },
     createUser: async (u: any) => ({ id: 1, ...u }),
     getAllUsers: async () => [],
     updateUser: async (id: number, updates: any) => ({ id, ...updates }),
@@ -73,6 +91,14 @@ function buildApp(role?: string, teamId?: number | null) {
 
   if (role) {
     instance.use((req: any, _res, next) => {
+      const userIdByRole: Record<string, number> = {
+        admin: 1,
+        public: 2,
+        referee: 3,
+        tournament_manager: 4,
+      };
+      (req.session as any).userId =
+        role === 'team' ? 10_000 + (teamId || 0) : userIdByRole[role];
       (req.session as any).userRole = role;
       if (teamId !== undefined) {
         (req.session as any).teamId = teamId;
@@ -253,6 +279,85 @@ describe('Integration: basic endpoints (mocked storage)', () => {
 // edge case / permission tests
 
 describe('Authorization edge cases', () => {
+  it('rejects login for a blocked user', async () => {
+    const blockedApp = buildApp();
+    vi.spyOn(storage, 'getUserByEmail').mockResolvedValueOnce({
+      id: 9,
+      email: 'blocked@example.com',
+      password: auth.hashPassword('secret123'),
+      name: 'Blocked User',
+      role: 'public',
+      teamId: null,
+      isActive: false,
+    } as any);
+
+    const res = await request(blockedApp)
+      .post('/api/auth/login')
+      .send({ email: 'blocked@example.com', password: 'secret123' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('bloqueada');
+  });
+
+  it('revokes an existing session after the user is blocked', async () => {
+    const blockedSessionApp = buildApp('public');
+    vi.spyOn(storage, 'getUserById').mockResolvedValueOnce({
+      id: 1,
+      email: 'blocked@example.com',
+      password: 'unused',
+      name: 'Blocked User',
+      role: 'public',
+      teamId: null,
+      isActive: false,
+    } as any);
+
+    const res = await request(blockedSessionApp).get('/api/teams');
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('bloqueada');
+  });
+
+  it('lets an admin unblock a user', async () => {
+    const updateUser = vi.spyOn(storage, 'updateUser').mockResolvedValueOnce({
+      id: 8,
+      email: 'restored@example.com',
+      password: 'hidden',
+      name: 'Restored User',
+      role: 'public',
+      teamId: null,
+      isActive: true,
+    } as any);
+
+    const res = await request(app)
+      .put('/api/admin/users/8')
+      .send({ isActive: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.isActive).toBe(true);
+    expect(res.body.password).toBeUndefined();
+    expect(updateUser).toHaveBeenCalledWith(8, { isActive: true });
+  });
+
+  it('blocks instead of physically deleting a user', async () => {
+    const updateUser = vi.spyOn(storage, 'updateUser').mockResolvedValueOnce({
+      id: 8,
+      email: 'blocked@example.com',
+      password: 'hidden',
+      name: 'Blocked User',
+      role: 'public',
+      teamId: null,
+      isActive: false,
+    } as any);
+    const deleteUser = vi.spyOn(storage, 'deleteUser');
+
+    const res = await request(app).delete('/api/admin/users/8');
+
+    expect(res.status).toBe(200);
+    expect(res.body.isActive).toBe(false);
+    expect(updateUser).toHaveBeenCalledWith(8, { isActive: false });
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when unauthenticated', async () => {
     const unauthApp = buildApp(); // no role injected
     const res = await request(unauthApp).get('/api/teams');

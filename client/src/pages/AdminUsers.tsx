@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
-import { useUsers, useCreateUser, useUpdateUserRole, useDeleteUser } from "@/hooks/use-admin";
+import { useUsers, useCreateUser, useUpdateUserRole, useSetUserActive } from "@/hooks/use-admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, Shield } from "lucide-react";
+import { Loader2, Lock, LockOpen, Plus, Shield } from "lucide-react";
 
 const ROLES = [
   { value: "admin", label: "Administrador" },
@@ -38,7 +38,7 @@ export default function AdminUsers() {
   const { data: users, isLoading } = useUsers();
   const createUser = useCreateUser();
   const updateRole = useUpdateUserRole();
-  const deleteUser = useDeleteUser();
+  const setUserActive = useSetUserActive();
 
   // Form state
   const [openCreate, setOpenCreate] = useState(false);
@@ -47,8 +47,11 @@ export default function AdminUsers() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("public");
 
-  // Delete confirmation
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [statusChange, setStatusChange] = useState<{
+    id: number;
+    isActive: boolean;
+    name: string;
+  } | null>(null);
 
   // Role change
   const [roleChangeId, setRoleChangeId] = useState<number | null>(null);
@@ -118,14 +121,21 @@ export default function AdminUsers() {
     }
   };
 
-  const handleDeleteUser = async (userId: number) => {
+  const handleStatusChange = async () => {
+    if (!statusChange) return;
+
     try {
-      await deleteUser.mutateAsync(userId);
+      await setUserActive.mutateAsync({
+        id: statusChange.id,
+        isActive: statusChange.isActive,
+      });
       toast({
         title: "Éxito",
-        description: "Usuario eliminado exitosamente",
+        description: statusChange.isActive
+          ? "Usuario desbloqueado exitosamente"
+          : "Usuario bloqueado exitosamente",
       });
-      setDeleteConfirm(null);
+      setStatusChange(null);
     } catch (error) {
       toast({
         variant: "destructive",
@@ -247,6 +257,7 @@ export default function AdminUsers() {
                   <th className="px-4 py-3 text-left font-semibold">Nombre</th>
                   <th className="px-4 py-3 text-left font-semibold">Email</th>
                   <th className="px-4 py-3 text-left font-semibold">Rol</th>
+                  <th className="px-4 py-3 text-left font-semibold">Estado</th>
                   <th className="px-4 py-3 text-center font-semibold">Acciones</th>
                 </tr>
               </thead>
@@ -261,6 +272,7 @@ export default function AdminUsers() {
                       <Select
                         value={user.role}
                         onValueChange={(newRole) => handleChangeRole(user.id, newRole)}
+                        disabled={!user.isActive}
                       >
                         <SelectTrigger className="w-32 h-8">
                           <SelectValue />
@@ -274,13 +286,38 @@ export default function AdminUsers() {
                         </SelectContent>
                       </Select>
                     </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                          user.isActive
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {user.isActive ? "Activo" : "Bloqueado"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <button
-                        onClick={() => setDeleteConfirm(user.id)}
-                        className="text-red-600 hover:text-red-700 transition-colors p-1"
-                        title="Eliminar usuario"
+                        onClick={() =>
+                          setStatusChange({
+                            id: user.id,
+                            isActive: !user.isActive,
+                            name: user.name,
+                          })
+                        }
+                        className={`p-1 transition-colors ${
+                          user.isActive
+                            ? "text-red-600 hover:text-red-700"
+                            : "text-green-600 hover:text-green-700"
+                        }`}
+                        title={user.isActive ? "Bloquear usuario" : "Desbloquear usuario"}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        {user.isActive ? (
+                          <Lock className="w-4 h-4" />
+                        ) : (
+                          <LockOpen className="w-4 h-4" />
+                        )}
                       </button>
                     </td>
                   </tr>
@@ -330,34 +367,39 @@ export default function AdminUsers() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Delete Confirmation */}
-        <AlertDialog open={deleteConfirm !== null} onOpenChange={(open) => {
-          if (!open) setDeleteConfirm(null);
+        {/* Status Change Confirmation */}
+        <AlertDialog open={statusChange !== null} onOpenChange={(open) => {
+          if (!open) setStatusChange(null);
         }}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Eliminar Usuario</AlertDialogTitle>
+              <AlertDialogTitle>
+                {statusChange?.isActive ? "Desbloquear Usuario" : "Bloquear Usuario"}
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                ¿Estás seguro de que deseas eliminar este usuario? Esta acción no se
-                puede deshacer.
+                {statusChange?.isActive
+                  ? `¿Deseas permitir que ${statusChange.name} vuelva a ingresar a la app?`
+                  : `¿Deseas bloquear a ${statusChange?.name}? Su sesión se cerrará y no podrá ingresar hasta que un administrador lo desbloquee.`}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="flex gap-3 justify-end">
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => {
-                  if (deleteConfirm) handleDeleteUser(deleteConfirm);
-                }}
-                disabled={deleteUser.isPending}
-                className="bg-red-600 hover:bg-red-700"
+                onClick={handleStatusChange}
+                disabled={setUserActive.isPending}
+                className={
+                  statusChange?.isActive
+                    ? "bg-green-600 hover:bg-green-700"
+                    : "bg-red-600 hover:bg-red-700"
+                }
               >
-                {deleteUser.isPending ? (
+                {setUserActive.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Eliminando...
+                    Actualizando...
                   </>
                 ) : (
-                  "Eliminar"
+                  statusChange?.isActive ? "Desbloquear" : "Bloquear"
                 )}
               </AlertDialogAction>
             </div>

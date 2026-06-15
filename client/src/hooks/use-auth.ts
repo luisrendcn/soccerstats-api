@@ -15,7 +15,7 @@ export function useAuth() {
     queryKey: ["auth", "me"],
     queryFn: async () => {
       const res = await apiFetch("/api/auth/me", { credentials: "include" });
-      if (res.status === 401) return null;
+      if (res.status === 401 || res.status === 403) return null;
       if (!res.ok) throw new Error("Failed to fetch auth status");
       return res.json() as Promise<{ userId: number; userRole: string; teamId?: number | null }>;
     },

@@ -97,19 +97,21 @@ export function useUpdateUserRole() {
   });
 }
 
-export function useDeleteUser() {
+export function useSetUserActive() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
       const res = await apiFetch(`/api/admin/users/${id}`, {
-        method: "DELETE",
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
         credentials: "include",
       });
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || "Failed to delete user");
+        throw new Error(error.message || "Failed to update user status");
       }
-      return res.json();
+      return res.json() as Promise<SafeUser>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
