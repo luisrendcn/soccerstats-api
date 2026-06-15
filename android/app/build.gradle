@@ -37,15 +37,23 @@ android {
     }
     buildTypes {
         release {
-            if (!signingPropertiesFile.exists()) {
-                throw new GradleException(
-                    "Missing release signing properties: ${signingPropertiesFile}"
-                )
+            if (signingPropertiesFile.exists()) {
+                signingConfig signingConfigs.release
             }
-            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def buildsRelease = taskGraph.allTasks.any {
+        it.name in ['assembleRelease', 'bundleRelease', 'packageRelease']
+    }
+    if (buildsRelease && !signingPropertiesFile.exists()) {
+        throw new GradleException(
+            "Missing release signing properties: ${signingPropertiesFile}"
+        )
     }
 }
 
