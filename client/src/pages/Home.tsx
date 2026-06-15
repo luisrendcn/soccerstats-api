@@ -6,12 +6,14 @@ import { MatchCard } from "@/components/MatchCard";
 import { Trophy, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { useLanguage } from "@/lib/i18n.tsx";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Home() {
   const { t } = useLanguage();
   const { data: matchesResp, isLoading: matchesLoading } = useMatches();
   const { data: teamsResp, isLoading: teamsLoading } = useTeams();
   const { data: tournaments, isLoading: tournamentsLoading } = useTournaments();
+  const { data: auth } = useAuth();
   const matches = matchesResp;
   const teams = teamsResp;
 
@@ -44,6 +46,18 @@ export default function Home() {
     <Layout title={t('leagueOverview')}>
       {/* Recent Matches */}
       <section>
+        {auth?.name && (
+          <div className="mb-6 rounded-xl border border-primary/10 bg-primary/5 p-4">
+            <p className="text-sm text-muted-foreground">Bienvenido</p>
+            <h2 className="text-2xl font-display font-bold text-foreground">
+              {auth.name}
+            </h2>
+            <p className="mt-1 text-xs uppercase tracking-wider text-primary">
+              Rol: {auth.userRole}
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-display">{t('recentResults')}</h2>
           <Link href="/matches" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">{t('viewSchedule')}</Link>

@@ -308,6 +308,18 @@ describe('Integration: basic endpoints (mocked storage)', () => {
 // edge case / permission tests
 
 describe('Authorization edge cases', () => {
+  it('returns the authenticated user name, email and role', async () => {
+    const res = await request(app).get('/api/auth/me');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      userId: 1,
+      email: 'active@example.com',
+      name: 'Active User',
+      userRole: 'admin',
+    });
+  });
+
   it('creates a pending request without authenticating the applicant', async () => {
     const registrationApp = buildApp();
     const createRequest = vi.spyOn(storage, 'createRegistrationRequest');

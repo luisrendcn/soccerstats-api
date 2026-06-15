@@ -10,6 +10,14 @@ export interface AuthResponse {
   teamId?: number | null;
 }
 
+export interface AuthStatus {
+  userId: number;
+  email: string;
+  name: string;
+  userRole: string;
+  teamId?: number | null;
+}
+
 export interface RegistrationResponse {
   status: "pending";
   message: string;
@@ -22,7 +30,7 @@ export function useAuth() {
       const res = await apiFetch("/api/auth/me", { credentials: "include" });
       if (res.status === 401 || res.status === 403) return null;
       if (!res.ok) throw new Error("Failed to fetch auth status");
-      return res.json() as Promise<{ userId: number; userRole: string; teamId?: number | null }>;
+      return res.json() as Promise<AuthStatus>;
     },
     retry: false,
   });
@@ -48,6 +56,8 @@ export function useLogin() {
       // immediately seed auth cache
       queryClient.setQueryData(["auth", "me"], {
         userId: user.id,
+        email: user.email,
+        name: user.name,
         userRole: user.role,
         teamId: user.teamId ?? null,
       });

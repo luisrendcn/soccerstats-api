@@ -164,12 +164,16 @@ export async function registerRoutes(
 
     (req.session as any).userRole = user.role;
     (req.session as any).teamId = user.teamId ?? null;
+    res.locals.authUser = user;
     next();
   };
 
   app.get("/api/auth/me", requireActiveSession, (req, res) => {
+    const user = res.locals.authUser;
     res.json({
       userId: (req.session as any).userId,
+      email: user.email,
+      name: user.name,
       userRole: (req.session as any).userRole,
       teamId: (req.session as any).teamId || null,
     });

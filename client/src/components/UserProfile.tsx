@@ -50,7 +50,14 @@ export function UserProfile() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="relative gap-2">
           <User className="w-4 h-4" />
-          <span className="text-sm">{auth.userRole}</span>
+          <span className="flex min-w-0 flex-col items-start leading-tight">
+            <span className="max-w-24 truncate text-sm font-semibold">
+              {auth.name}
+            </span>
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              {auth.userRole}
+            </span>
+          </span>
           {pendingCount > 0 && (
             <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1 text-[10px] font-bold leading-5 text-white">
               {pendingCount > 99 ? "99+" : pendingCount}
@@ -59,8 +66,9 @@ export function UserProfile() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <div className="px-2 py-1.5 text-sm font-medium text-foreground">
-          Mi Perfil
+        <div className="px-2 py-1.5">
+          <p className="text-sm font-medium text-foreground">{auth.name}</p>
+          <p className="text-xs text-muted-foreground">{auth.email}</p>
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled className="text-xs text-muted-foreground">
