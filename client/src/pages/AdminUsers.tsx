@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
-import { useUsers, useCreateUser, useUpdateUserRole, useSetUserActive } from "@/hooks/use-admin";
+import {
+  useApproveRegistrationRequest,
+  useCreateUser,
+  useRegistrationRequests,
+  useRejectRegistrationRequest,
+  useSetUserActive,
+  useUpdateUserRole,
+  useUsers,
+} from "@/hooks/use-admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +31,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Lock, LockOpen, Plus, Shield } from "lucide-react";
+import {
+  Check,
+  Clock,
+  Loader2,
+  Lock,
+  LockOpen,
+  Plus,
+  Shield,
+  X,
+} from "lucide-react";
 
 const ROLES = [
   { value: "admin", label: "Administrador" },
@@ -36,9 +53,13 @@ const ROLES = [
 export default function AdminUsers() {
   const { toast } = useToast();
   const { data: users, isLoading } = useUsers();
+  const { data: registrationRequests, isLoading: requestsLoading } =
+    useRegistrationRequests();
   const createUser = useCreateUser();
   const updateRole = useUpdateUserRole();
   const setUserActive = useSetUserActive();
+  const approveRequest = useApproveRegistrationRequest();
+  const rejectRequest = useRejectRegistrationRequest();
 
   // Form state
   const [openCreate, setOpenCreate] = useState(false);
@@ -51,6 +72,11 @@ export default function AdminUsers() {
     id: number;
     isActive: boolean;
     name: string;
+  } | null>(null);
+  const [reviewRequest, setReviewRequest] = useState<{
+    id: number;
+    name: string;
+    action: "approve" | "reject";
   } | null>(null);
 
   // Role change
@@ -145,7 +171,33 @@ export default function AdminUsers() {
     }
   };
 
-  if (isLoading) {
+  const handleReviewRequest = async () => {
+    if (!reviewRequest) return;
+
+    try {
+      if (reviewRequest.action === "approve") {
+        await approveRequest.mutateAsync(reviewRequest.id);
+      } else {
+        await rejectRequest.mutateAsync(reviewRequest.id);
+      }
+      toast({
+        title: "Solicitud procesada",
+        description:
+          reviewRequest.action === "approve"
+            ? "El usuario ya puede ingresar a la app"
+            : "La solicitud fue rechazada",
+      });
+      setReviewRequest(null);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: (error as Error).message,
+      });
+    }
+  };
+
+  if (isLoading || requestsLoading) {
     return (
       <Layout title="Gestión de Usuarios">
         <div className="flex justify-center items-center py-12">
@@ -158,13 +210,84 @@ export default function AdminUsers() {
   const roleLabel = (roleValue: string) => {
     return ROLES.find((r) => r.value === roleValue)?.label || roleValue;
   };
+  const activeUsers = users?.filter((user) => user.isActive) || [];
+  const blockedUsers = users?.filter((user) => !user.isActive) || [];
 
   return (
     <Layout title="Gestión de Usuarios">
       <div className="space-y-6">
+        <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-amber-700" />
+              <h2 className="font-semibold text-amber-900">Lista de espera</h2>
+            </div>
+            <span className="rounded-full bg-amber-600 px-2 py-1 text-xs font-bold text-white">
+              {registrationRequests?.length || 0}
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {registrationRequests?.map((request) => (
+              <div
+                key={request.id}
+                className="rounded-lg border border-amber-200 bg-background p-3"
+              >
+                <p className="font-medium">{request.name}</p>
+                <p className="text-xs text-muted-foreground">{request.email}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Solicitó acceso:{" "}
+                  {request.requestedAt
+                    ? new Date(request.requestedAt).toLocaleString()
+                    : "Fecha no disponible"}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1 gap-1 bg-green-600 hover:bg-green-700"
+                    onClick={() =>
+                      setReviewRequest({
+                        id: request.id,
+                        name: request.name,
+                        action: "approve",
+                      })
+                    }
+                  >
+                    <Check className="h-4 w-4" />
+                    Aprobar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="flex-1 gap-1"
+                    onClick={() =>
+                      setReviewRequest({
+                        id: request.id,
+                        name: request.name,
+                        action: "reject",
+                      })
+                    }
+                  >
+                    <X className="h-4 w-4" />
+                    Rechazar
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            {!registrationRequests?.length && (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No hay solicitudes pendientes
+              </p>
+            )}
+          </div>
+        </section>
+
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Todos los Usuarios</h2>
+          <h2 className="text-lg font-semibold">
+            Usuarios activos ({activeUsers.length})
+          </h2>
           <Dialog open={openCreate} onOpenChange={setOpenCreate}>
             <DialogTrigger asChild>
               <Button size="sm" className="gap-2">
@@ -262,7 +385,7 @@ export default function AdminUsers() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/30">
-                {users?.map((user) => (
+                {activeUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-3 font-medium">{user.name}</td>
                     <td className="px-4 py-3 text-muted-foreground text-xs">
@@ -326,12 +449,53 @@ export default function AdminUsers() {
             </table>
           </div>
 
-          {!users?.length && (
+          {!activeUsers.length && (
             <div className="text-center py-8 text-muted-foreground">
-              No hay usuarios registrados
+              No hay usuarios activos
             </div>
           )}
         </div>
+
+        <section>
+          <h2 className="mb-3 text-lg font-semibold">
+            Usuarios bloqueados ({blockedUsers.length})
+          </h2>
+          <div className="space-y-2">
+            {blockedUsers.map((user) => (
+              <div
+                key={user.id}
+                className="flex items-center justify-between rounded-lg border border-border bg-card p-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{user.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {user.email}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-3 gap-1 text-green-700"
+                  onClick={() =>
+                    setStatusChange({
+                      id: user.id,
+                      isActive: true,
+                      name: user.name,
+                    })
+                  }
+                >
+                  <LockOpen className="h-4 w-4" />
+                  Desbloquear
+                </Button>
+              </div>
+            ))}
+            {!blockedUsers.length && (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No hay usuarios bloqueados
+              </p>
+            )}
+          </div>
+        </section>
 
         {/* Role Change Confirmation */}
         <AlertDialog open={roleChangeId !== null} onOpenChange={(open) => {
@@ -362,6 +526,46 @@ export default function AdminUsers() {
                 ) : (
                   "Confirmar"
                 )}
+              </AlertDialogAction>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={reviewRequest !== null}
+          onOpenChange={(open) => {
+            if (!open) setReviewRequest(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {reviewRequest?.action === "approve"
+                  ? "Aprobar solicitud"
+                  : "Rechazar solicitud"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {reviewRequest?.action === "approve"
+                  ? `¿Deseas crear la cuenta de ${reviewRequest.name} y permitirle ingresar?`
+                  : `¿Deseas rechazar la solicitud de ${reviewRequest?.name}? Este correo no podrá enviar otra solicitud.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="flex justify-end gap-3">
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleReviewRequest}
+                disabled={approveRequest.isPending || rejectRequest.isPending}
+                className={
+                  reviewRequest?.action === "approve"
+                    ? "bg-green-600 hover:bg-green-700"
+                    : "bg-red-600 hover:bg-red-700"
+                }
+              >
+                {approveRequest.isPending || rejectRequest.isPending
+                  ? "Procesando..."
+                  : reviewRequest?.action === "approve"
+                    ? "Aprobar"
+                    : "Rechazar"}
               </AlertDialogAction>
             </div>
           </AlertDialogContent>

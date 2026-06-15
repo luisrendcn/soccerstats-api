@@ -46,6 +46,35 @@ vi.mock('../storage', () => {
     getAllUsers: async () => [],
     updateUser: async (id: number, updates: any) => ({ id, ...updates }),
     deleteUser: async () => {},
+    getRegistrationRequestByEmail: async () => undefined,
+    getPendingRegistrationRequests: async () => [],
+    createRegistrationRequest: async (registration: any) => ({
+      id: 1,
+      ...registration,
+      status: 'pending',
+      requestedAt: new Date(),
+      reviewedAt: null,
+      reviewedBy: null,
+    }),
+    approveRegistrationRequest: async (id: number) => ({
+      id,
+      email: 'approved@example.com',
+      password: 'hidden',
+      name: 'Approved User',
+      role: 'public',
+      teamId: null,
+      isActive: true,
+    }),
+    rejectRegistrationRequest: async (id: number, adminId: number) => ({
+      id,
+      email: 'rejected@example.com',
+      password: 'hidden',
+      name: 'Rejected User',
+      status: 'rejected',
+      requestedAt: new Date(),
+      reviewedAt: new Date(),
+      reviewedBy: adminId,
+    }),
     getTournaments: async () => [],
     getTournamentById: async (id: number) => ({ id, name: `Tournament ${id}` }),
     createTournament: async (t: any) => ({ id: 1, ...t }),
@@ -279,6 +308,80 @@ describe('Integration: basic endpoints (mocked storage)', () => {
 // edge case / permission tests
 
 describe('Authorization edge cases', () => {
+  it('creates a pending request without authenticating the applicant', async () => {
+    const registrationApp = buildApp();
+    const createRequest = vi.spyOn(storage, 'createRegistrationRequest');
+    const createUser = vi.spyOn(storage, 'createUser');
+
+    const agent = request.agent(registrationApp);
+    const register = await agent.post('/api/auth/register').send({
+      email: 'pending@example.com',
+      name: 'Pending User',
+      password: 'secret123',
+      confirmPassword: 'secret123',
+    });
+
+    expect(register.status).toBe(202);
+    expect(register.body.status).toBe('pending');
+    expect(createRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'pending@example.com',
+        name: 'Pending User',
+      }),
+    );
+    expect(createUser).not.toHaveBeenCalled();
+
+    const me = await agent.get('/api/auth/me');
+    expect(me.status).toBe(401);
+  });
+
+  it('lets an admin approve a pending registration', async () => {
+    const approve = vi.spyOn(storage, 'approveRegistrationRequest');
+
+    const res = await request(app)
+      .post('/api/admin/registration-requests/12/approve');
+
+    expect(res.status).toBe(201);
+    expect(res.body.email).toBe('approved@example.com');
+    expect(res.body.password).toBeUndefined();
+    expect(approve).toHaveBeenCalledWith(12, 1);
+  });
+
+  it('lets an admin reject a pending registration', async () => {
+    const reject = vi.spyOn(storage, 'rejectRegistrationRequest');
+
+    const res = await request(app)
+      .post('/api/admin/registration-requests/13/reject');
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('rejected');
+    expect(res.body.password).toBeUndefined();
+    expect(reject).toHaveBeenCalledWith(13, 1);
+  });
+
+  it('does not accept another request for the same pending email', async () => {
+    const registrationApp = buildApp();
+    vi.spyOn(storage, 'getRegistrationRequestByEmail').mockResolvedValueOnce({
+      id: 15,
+      email: 'pending@example.com',
+      password: 'hidden',
+      name: 'Pending User',
+      status: 'pending',
+      requestedAt: new Date(),
+      reviewedAt: null,
+      reviewedBy: null,
+    } as any);
+
+    const res = await request(registrationApp).post('/api/auth/register').send({
+      email: 'pending@example.com',
+      name: 'Pending User',
+      password: 'secret123',
+      confirmPassword: 'secret123',
+    });
+
+    expect(res.status).toBe(409);
+  });
+
   it('rejects login for a blocked user', async () => {
     const blockedApp = buildApp();
     vi.spyOn(storage, 'getUserByEmail').mockResolvedValueOnce({

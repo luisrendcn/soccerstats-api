@@ -5,6 +5,7 @@ import {
   matches,
   goals,
   users,
+  registrationRequests,
   tournaments,
   tournamentTeams,
   type InsertTeam,
@@ -17,6 +18,7 @@ import {
   type Match,
   type Goal,
   type User,
+  type RegistrationRequest,
   type Tournament,
   type InsertTournament,
   type TournamentTeam,
@@ -63,6 +65,15 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, updates: Partial<InsertUser>): Promise<User>;
   deleteUser(id: number): Promise<void>;
+  getRegistrationRequestByEmail(email: string): Promise<RegistrationRequest | undefined>;
+  getPendingRegistrationRequests(): Promise<RegistrationRequest[]>;
+  createRegistrationRequest(request: {
+    email: string;
+    password: string;
+    name: string;
+  }): Promise<RegistrationRequest>;
+  approveRegistrationRequest(id: number, adminId: number): Promise<User | undefined>;
+  rejectRegistrationRequest(id: number, adminId: number): Promise<RegistrationRequest | undefined>;
 
   // Tournaments
   getTournaments(): Promise<Tournament[]>;
@@ -234,6 +245,111 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUser(id: number): Promise<void> {
     await db.delete(users).where(eq(users.id, id));
+  }
+
+  async getRegistrationRequestByEmail(email: string): Promise<RegistrationRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(registrationRequests)
+      .where(eq(registrationRequests.email, email));
+    return request;
+  }
+
+  async getPendingRegistrationRequests(): Promise<RegistrationRequest[]> {
+    return db
+      .select()
+      .from(registrationRequests)
+      .where(eq(registrationRequests.status, "pending"))
+      .orderBy(desc(registrationRequests.requestedAt));
+  }
+
+  async createRegistrationRequest(request: {
+    email: string;
+    password: string;
+    name: string;
+  }): Promise<RegistrationRequest> {
+    const [created] = await db
+      .insert(registrationRequests)
+      .values({ ...request, status: "pending" })
+      .returning();
+    return created;
+  }
+
+  async approveRegistrationRequest(
+    id: number,
+    adminId: number,
+  ): Promise<User | undefined> {
+    return db.transaction(async (tx) => {
+      const [request] = await tx
+        .select()
+        .from(registrationRequests)
+        .where(
+          and(
+            eq(registrationRequests.id, id),
+            eq(registrationRequests.status, "pending"),
+          ),
+        );
+      if (!request) return undefined;
+
+      const [existingUser] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.email, request.email));
+      if (existingUser) {
+        await tx
+          .update(registrationRequests)
+          .set({
+            status: "rejected",
+            reviewedAt: new Date(),
+            reviewedBy: adminId,
+          })
+          .where(eq(registrationRequests.id, id));
+        return undefined;
+      }
+
+      const [user] = await tx
+        .insert(users)
+        .values({
+          email: request.email,
+          password: request.password,
+          name: request.name,
+          role: "public",
+          isActive: true,
+        })
+        .returning();
+
+      await tx
+        .update(registrationRequests)
+        .set({
+          status: "approved",
+          reviewedAt: new Date(),
+          reviewedBy: adminId,
+        })
+        .where(eq(registrationRequests.id, id));
+
+      return user;
+    });
+  }
+
+  async rejectRegistrationRequest(
+    id: number,
+    adminId: number,
+  ): Promise<RegistrationRequest | undefined> {
+    const [request] = await db
+      .update(registrationRequests)
+      .set({
+        status: "rejected",
+        reviewedAt: new Date(),
+        reviewedBy: adminId,
+      })
+      .where(
+        and(
+          eq(registrationRequests.id, id),
+          eq(registrationRequests.status, "pending"),
+        ),
+      )
+      .returning();
+    return request;
   }
 
   /* =======================

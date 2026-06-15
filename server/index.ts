@@ -117,6 +117,19 @@ app.use(
   }),
 );
 
+app.use(
+  "/api/auth/register",
+  rateLimit({
+    windowMs: 24 * 60 * 60 * 1000,
+    limit: 3,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: {
+      message: "Se alcanzó el límite diario de solicitudes de registro.",
+    },
+  }),
+);
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -161,6 +174,18 @@ app.use((req, res, next) => {
     await db.execute(sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at timestamp`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at timestamp`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS tournament_id integer`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS registration_requests (
+        id serial PRIMARY KEY,
+        email text NOT NULL UNIQUE,
+        password text NOT NULL,
+        name text NOT NULL,
+        status text NOT NULL DEFAULT 'pending',
+        requested_at timestamp DEFAULT now(),
+        reviewed_at timestamp,
+        reviewed_by integer
+      )
+    `);
     const count = await db.execute(sql`SELECT count(*) FROM teams`);
     console.log("Migration complete, teams count query result:", count);
   } catch (err) {

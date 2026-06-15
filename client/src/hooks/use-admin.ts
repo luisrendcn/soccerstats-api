@@ -1,8 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { User } from "@shared/schema";
+import type { RegistrationRequest, User } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
 
 export interface SafeUser extends Omit<User, "password"> {}
+export interface SafeRegistrationRequest
+  extends Omit<RegistrationRequest, "password"> {}
 
 export function useUsers() {
   return useQuery({
@@ -13,6 +15,55 @@ export function useUsers() {
       return res.json() as Promise<SafeUser[]>;
     },
   });
+}
+
+export function useRegistrationRequests(enabled = true) {
+  return useQuery({
+    queryKey: ["admin", "registration-requests"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/admin/registration-requests", {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch registration requests");
+      return res.json() as Promise<SafeRegistrationRequest[]>;
+    },
+    enabled,
+    refetchInterval: enabled ? 30_000 : false,
+  });
+}
+
+function useReviewRegistrationRequest(action: "approve" | "reject") {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiFetch(
+        `/api/admin/registration-requests/${id}/${action}`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || `Failed to ${action} request`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "registration-requests"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
+export function useApproveRegistrationRequest() {
+  return useReviewRegistrationRequest("approve");
+}
+
+export function useRejectRegistrationRequest() {
+  return useReviewRegistrationRequest("reject");
 }
 
 export function useCreateUser() {

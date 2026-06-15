@@ -12,6 +12,7 @@ export default function Register() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const register = useRegister();
+  const [requestSent, setRequestSent] = useState(false);
   
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -49,9 +50,14 @@ export default function Register() {
     }
 
     try {
-      await register.mutateAsync({ email, name, password, confirmPassword });
-      toast({ title: "✓ Cuenta creada", description: "Serás redirigido automáticamente..." });
-      setLocation("/");
+      const response = await register.mutateAsync({
+        email,
+        name,
+        password,
+        confirmPassword,
+      });
+      toast({ title: "Solicitud enviada", description: response.message });
+      setRequestSent(true);
     } catch (error) {
       toast({
         variant: "destructive",
@@ -70,6 +76,20 @@ export default function Register() {
             <h1 className="text-2xl font-bold">Crear Cuenta</h1>
           </div>
 
+          {requestSent ? (
+            <div className="space-y-5 text-center">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+                <h2 className="font-semibold">Solicitud en espera</h2>
+                <p className="mt-2 text-sm">
+                  Un administrador debe aprobar tu cuenta antes de que puedas
+                  iniciar sesión.
+                </p>
+              </div>
+              <Button className="w-full" onClick={() => setLocation("/login")}>
+                Volver al inicio de sesión
+              </Button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="name">Nombre Completo</Label>
@@ -134,8 +154,9 @@ export default function Register() {
               )}
             </Button>
           </form>
+          )}
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
+          {!requestSent && <div className="mt-6 text-center text-sm text-muted-foreground">
             ¿Ya tienes cuenta?{" "}
             <button
               onClick={() => setLocation("/login")}
@@ -143,7 +164,7 @@ export default function Register() {
             >
               Inicia sesión
             </button>
-          </div>
+          </div>}
         </div>
       </Card>
     </div>

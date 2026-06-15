@@ -54,28 +54,38 @@ export async function registerRoutes(
   app.post("/api/auth/register", async (req, res) => {
     try {
       const input = registerSchema.parse(req.body);
+      const email = input.email.trim().toLowerCase();
       
-      // Verificar si el usuario ya existe
-      const existingUser = await storage.getUserByEmail(input.email);
+      const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
         return res.status(400).json({ message: "Email ya está registrado" });
       }
 
-      // Crear nuevo usuario con contraseña hasheada
-      const user = await storage.createUser({
-        email: input.email,
-        name: input.name,
+      const existingRequest = await storage.getRegistrationRequestByEmail(email);
+      if (existingRequest?.status === "pending") {
+        return res.status(409).json({
+          message: "Ya existe una solicitud pendiente para este correo",
+        });
+      }
+      if (existingRequest?.status === "rejected") {
+        return res.status(403).json({
+          message: "Esta solicitud fue rechazada. Contacta al administrador.",
+        });
+      }
+      if (existingRequest) {
+        return res.status(400).json({ message: "Email ya está registrado" });
+      }
+
+      await storage.createRegistrationRequest({
+        email,
+        name: input.name.trim(),
         password: hashPassword(input.password),
-        role: "public",
       });
 
-      await establishSession(req, user);
-      res.status(201).json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        teamId: user.teamId ?? null,
+      res.status(202).json({
+        status: "pending",
+        message:
+          "Solicitud enviada. Un administrador debe aprobarla antes de que puedas ingresar.",
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -202,6 +212,60 @@ export async function registerRoutes(
       throw err;
     }
   });
+
+  app.get("/api/admin/registration-requests", requireAdmin, async (_req, res) => {
+    const requests = await storage.getPendingRegistrationRequests();
+    const safeRequests = requests.map(({ password, ...request }) => request);
+    res.json(safeRequests);
+  });
+
+  app.post(
+    "/api/admin/registration-requests/:id/approve",
+    requireAdmin,
+    async (req, res) => {
+      const requestId = Number(req.params.id);
+      if (!Number.isInteger(requestId) || requestId <= 0) {
+        return res.status(400).json({ message: "Solicitud inválida" });
+      }
+
+      const user = await storage.approveRegistrationRequest(
+        requestId,
+        (req.session as any).userId,
+      );
+      if (!user) {
+        return res.status(404).json({
+          message: "Solicitud no encontrada, ya procesada o correo registrado",
+        });
+      }
+
+      const { password, ...safeUser } = user;
+      res.status(201).json(safeUser);
+    },
+  );
+
+  app.post(
+    "/api/admin/registration-requests/:id/reject",
+    requireAdmin,
+    async (req, res) => {
+      const requestId = Number(req.params.id);
+      if (!Number.isInteger(requestId) || requestId <= 0) {
+        return res.status(400).json({ message: "Solicitud inválida" });
+      }
+
+      const request = await storage.rejectRegistrationRequest(
+        requestId,
+        (req.session as any).userId,
+      );
+      if (!request) {
+        return res.status(404).json({
+          message: "Solicitud no encontrada o ya procesada",
+        });
+      }
+
+      const { password, ...safeRequest } = request;
+      res.json(safeRequest);
+    },
+  );
 
   app.post("/api/admin/users", requireAdmin, async (req, res) => {
     try {

@@ -1,4 +1,5 @@
 import { useAuth, useLogout } from "@/hooks/use-auth";
+import { useRegistrationRequests } from "@/hooks/use-admin";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,13 +9,16 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { User, LogOut, Settings, Users, Shield } from "lucide-react";
+import { User, LogOut, Settings, Users } from "lucide-react";
 import { Loader2 } from "lucide-react";
 
 export function UserProfile() {
   const { data: auth, isLoading } = useAuth();
   const logout = useLogout();
   const [, setLocation] = useLocation();
+  const isAdmin = auth?.userRole === "admin";
+  const { data: registrationRequests } = useRegistrationRequests(isAdmin);
+  const pendingCount = registrationRequests?.length || 0;
 
   if (isLoading) {
     return <Loader2 className="w-4 h-4 animate-spin" />;
@@ -44,9 +48,14 @@ export function UserProfile() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-2">
+        <Button variant="ghost" size="sm" className="relative gap-2">
           <User className="w-4 h-4" />
           <span className="text-sm">{auth.userRole}</span>
+          {pendingCount > 0 && (
+            <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1 text-[10px] font-bold leading-5 text-white">
+              {pendingCount > 99 ? "99+" : pendingCount}
+            </span>
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -63,6 +72,11 @@ export function UserProfile() {
             <DropdownMenuItem onClick={() => setLocation("/admin/users")}>
               <Users className="w-4 h-4 mr-2" />
               Gestión de Usuarios
+              {pendingCount > 0 && (
+                <span className="ml-auto rounded-full bg-red-600 px-2 py-0.5 text-xs text-white">
+                  {pendingCount}
+                </span>
+              )}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>

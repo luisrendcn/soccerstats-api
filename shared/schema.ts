@@ -52,6 +52,17 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const registrationRequests = pgTable("registration_requests", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("pending"),
+  requestedAt: timestamp("requested_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: integer("reviewed_by"),
+});
+
 export const tournaments = pgTable("tournaments", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -149,6 +160,12 @@ export const insertPlayerSchema = createInsertSchema(players).omit({ id: true })
 export const insertMatchSchema = createInsertSchema(matches).omit({ id: true });
 export const insertGoalSchema = createInsertSchema(goals).omit({ id: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertRegistrationRequestSchema = createInsertSchema(registrationRequests).omit({
+  id: true,
+  requestedAt: true,
+  reviewedAt: true,
+  reviewedBy: true,
+});
 export const insertTournamentSchema = createInsertSchema(tournaments).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 
 // Zod validation schemas
@@ -177,6 +194,8 @@ export const updateTournamentSchema = createTournamentSchema.partial();
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type RegistrationRequest = typeof registrationRequests.$inferSelect;
+export type InsertRegistrationRequest = z.infer<typeof insertRegistrationRequestSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type UserRole = "admin" | "tournament_manager" | "team" | "referee" | "public";

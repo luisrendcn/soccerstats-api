@@ -10,6 +10,11 @@ export interface AuthResponse {
   teamId?: number | null;
 }
 
+export interface RegistrationResponse {
+  status: "pending";
+  message: string;
+}
+
 export function useAuth() {
   return useQuery({
     queryKey: ["auth", "me"],
@@ -65,16 +70,7 @@ export function useRegister() {
         const error = await res.json();
         throw new Error(error.message || "Registration failed");
       }
-      return res.json() as Promise<AuthResponse>;
-    },
-    onSuccess: (user) => {
-      queryClient.setQueryData(["auth", "me"], {
-        userId: user.id,
-        userRole: user.role,
-        teamId: user.teamId ?? null,
-      });
-      queryClient.setQueryData(["auth", "me"], null);
-      queryClient.clear();
+      return res.json() as Promise<RegistrationResponse>;
     },
   });
 }
