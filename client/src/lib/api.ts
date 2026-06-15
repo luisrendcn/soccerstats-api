@@ -16,7 +16,7 @@ export const API_BASE = (() => {
 export function apiFetch(input: RequestInfo, init?: RequestInit) {
   if (typeof input === "string") {
     const url = /^https?:\/\//.test(input) ? input : `${API_BASE}${input}`;
-    return fetch(url, { credentials: "include", ...init });
+    return fetch(url, { credentials: "include", cache: "no-store", ...init });
   }
-  return fetch(input, { credentials: "include", ...init });
+  return fetch(input, { credentials: "include", cache: "no-store", ...init });
 }

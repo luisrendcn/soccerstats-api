@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Tournament, CreateTournamentInput, UpdateTournamentInput, Team, InsertTeam } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
+import { refreshAppData } from "@/lib/queryClient";
 
 export function useTournaments() {
   return useQuery({
@@ -41,9 +42,7 @@ export function useCreateTournament() {
       }
       return res.json() as Promise<Tournament>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tournaments"] });
-    },
+    onSuccess: () => refreshAppData(queryClient),
   });
 }
 
@@ -63,10 +62,7 @@ export function useUpdateTournament() {
       }
       return res.json() as Promise<Tournament>;
     },
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ["tournaments"] });
-      queryClient.invalidateQueries({ queryKey: ["tournaments", id] });
-    },
+    onSuccess: () => refreshAppData(queryClient),
   });
 }
 
@@ -84,10 +80,7 @@ export function useDeleteTournament() {
       }
       return res.json();
     },
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ["tournaments"] });
-      queryClient.invalidateQueries({ queryKey: ["tournaments", id] });
-    },
+    onSuccess: () => refreshAppData(queryClient),
   });
 }
 
@@ -107,9 +100,7 @@ export function useAddTeamToTournament() {
       }
       return res.json();
     },
-    onSuccess: (_, { tournamentId }) => {
-      queryClient.invalidateQueries({ queryKey: ["tournaments", tournamentId, "teams"] });
-    },
+    onSuccess: () => refreshAppData(queryClient),
   });
 }
 
@@ -129,10 +120,7 @@ export function useCreateTournamentTeam() {
       }
       return res.json() as Promise<Team>;
     },
-    onSuccess: (_, { tournamentId }) => {
-      queryClient.invalidateQueries({ queryKey: ["tournaments", tournamentId, "teams"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
-    },
+    onSuccess: () => refreshAppData(queryClient),
   });
 }
 
@@ -150,9 +138,7 @@ export function useRemoveTeamFromTournament() {
       }
       return res.json();
     },
-    onSuccess: (_, { tournamentId }) => {
-      queryClient.invalidateQueries({ queryKey: ["tournaments", tournamentId, "teams"] });
-    },
+    onSuccess: () => refreshAppData(queryClient),
   });
 }
 

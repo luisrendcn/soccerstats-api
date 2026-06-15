@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { apiFetch } from "@/lib/api";
+import { refreshAppData } from "@/lib/queryClient";
 
 export default function Teams() {
   const [page, setPage] = useState(1);
@@ -50,7 +51,7 @@ export default function Teams() {
               </div>
             </Link>
             {auth?.userRole === 'admin' && (
-              <button title={`Delete ${team.name}`} className="absolute top-2 right-2 p-2 rounded-md bg-red-50 hover:bg-red-100" onClick={async (e) => { e.preventDefault(); if (!confirm(`Delete ${team.name}?`)) return; const response = await apiFetch(`/api/teams/${team.id}`, { method: "DELETE" }); if (!response.ok) throw new Error("Failed to delete team"); queryClient.invalidateQueries({ queryKey: ['/api/teams'] }); }}>
+              <button title={`Delete ${team.name}`} className="absolute top-2 right-2 p-2 rounded-md bg-red-50 hover:bg-red-100" onClick={async (e) => { e.preventDefault(); if (!confirm(`Delete ${team.name}?`)) return; const response = await apiFetch(`/api/teams/${team.id}`, { method: "DELETE" }); if (!response.ok) throw new Error("Failed to delete team"); await refreshAppData(queryClient); }}>
                 <Trash className="w-4 h-4 text-red-600" />
               </button>
             )}

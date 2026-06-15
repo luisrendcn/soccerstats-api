@@ -1,8 +1,11 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
+import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { BottomNav } from "./BottomNav";
 import { LanguageSelector } from "./LanguageSelector";
 import { UserProfile } from "./UserProfile";
-import { ArrowLeft } from "lucide-react";
+import { refreshAppData } from "@/lib/queryClient";
+import { ArrowLeft, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface LayoutProps {
   children: ReactNode;
@@ -12,6 +15,20 @@ interface LayoutProps {
 }
 
 export function Layout({ children, header, title, showBack }: LayoutProps) {
+  const queryClient = useQueryClient();
+  const activeFetches = useIsFetching();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const refreshInProgress = isRefreshing || activeFetches > 0;
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshAppData(queryClient);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-muted/10 pb-24">
       {/* Header */}
@@ -34,6 +51,16 @@ export function Layout({ children, header, title, showBack }: LayoutProps) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <button
+              title="Actualizar datos"
+              className="rounded-full p-2 hover:bg-muted/20 disabled:opacity-60"
+              onClick={handleRefresh}
+              disabled={refreshInProgress}
+            >
+              <RefreshCw
+                className={cn("h-4 w-4", refreshInProgress && "animate-spin")}
+              />
+            </button>
             <LanguageSelector />
             <UserProfile />
           </div>

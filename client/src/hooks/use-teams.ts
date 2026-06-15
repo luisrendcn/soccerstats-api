@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertTeam, type InsertPlayer } from "@shared/routes";
 import { apiFetch } from "@/lib/api";
+import { refreshAppData } from "@/lib/queryClient";
 
 export function useTeams(page = 1, limit = 10, search = "") {
   return useQuery({
@@ -52,7 +53,7 @@ export function useCreateTeam() {
       }
       return api.teams.create.responses[201].parse(await res.json());
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.teams.list.path] }),
+    onSuccess: () => refreshAppData(queryClient),
   });
 }
 
@@ -93,8 +94,6 @@ export function useCreatePlayer() {
       }
       return api.players.create.responses[201].parse(await res.json());
     },
-    onSuccess: (_, variables) => queryClient.invalidateQueries({ 
-      queryKey: [api.players.list.path, variables.teamId] 
-    }),
+    onSuccess: () => refreshAppData(queryClient),
   });
 }

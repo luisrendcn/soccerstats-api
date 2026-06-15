@@ -9,6 +9,7 @@ import { Loader2, Trash } from "lucide-react";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { refreshAppData } from "@/lib/queryClient";
 
 export default function Matches() {
   const { t } = useLanguage();
@@ -75,7 +76,7 @@ export default function Matches() {
                 if (!confirm('Delete this match?')) return;
                 const response = await apiFetch(`/api/matches/${match.id}`, { method: "DELETE" });
                 if (!response.ok) throw new Error("Failed to delete match");
-                queryClient.invalidateQueries({ queryKey: [api.matches.list.path] });
+                await refreshAppData(queryClient);
               }}>
                 <Trash className="w-4 h-4 text-red-600" />
               </button>

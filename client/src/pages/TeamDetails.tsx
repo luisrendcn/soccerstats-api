@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/api";
+import { refreshAppData } from "@/lib/queryClient";
 
 export default function TeamDetails() {
   const [match, params] = useRoute("/teams/:id");
@@ -123,8 +124,7 @@ export default function TeamDetails() {
                   if (!confirm(`Remove player ${player.name}?`)) return;
                   const response = await apiFetch(`/api/players/${player.id}`, { method: "DELETE" });
                   if (!response.ok) throw new Error("Failed to remove player");
-                  // refetch players by invalidating query
-                  queryClient.invalidateQueries({ queryKey: [api.players.list.path, teamId] });
+                  await refreshAppData(queryClient);
                 }}>
                   <Trash className="w-4 h-4 text-red-600" />
                 </button>

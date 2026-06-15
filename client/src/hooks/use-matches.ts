@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertMatch, type InsertGoal } from "@shared/routes";
 import { apiFetch } from "@/lib/api";
+import { refreshAppData } from "@/lib/queryClient";
 
 export function useMatches(page = 1, limit = 10, search = "") {
   return useQuery({
@@ -55,7 +56,7 @@ export function useCreateMatch() {
       }
       return api.matches.create.responses[201].parse(await res.json());
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [api.matches.list.path] }),
+    onSuccess: () => refreshAppData(queryClient),
   });
 }
 
@@ -72,9 +73,7 @@ export function useUpdateMatch() {
       if (!res.ok) throw new Error('Failed to update match');
       return api.matches.update.responses[200].parse(await res.json());
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.matches.list.path] });
-    },
+    onSuccess: () => refreshAppData(queryClient),
   });
 }
 
@@ -104,10 +103,6 @@ export function useCreateGoal() {
       if (!res.ok) throw new Error('Failed to add goal');
       return api.goals.create.responses[201].parse(await res.json());
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [api.goals.list.path, variables.matchId] });
-      queryClient.invalidateQueries({ queryKey: [api.matches.get.path, variables.matchId] });
-      queryClient.invalidateQueries({ queryKey: [api.matches.list.path] });
-    },
+    onSuccess: () => refreshAppData(queryClient),
   });
 }

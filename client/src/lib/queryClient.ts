@@ -44,8 +44,10 @@ export const queryClient = new QueryClient({
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
+      staleTime: 30_000,
       retry: false,
     },
     mutations: {
@@ -53,3 +55,8 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+export async function refreshAppData(client: QueryClient) {
+  await client.invalidateQueries();
+  await client.refetchQueries({ type: "active" });
+}
