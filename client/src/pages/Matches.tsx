@@ -27,12 +27,16 @@ export default function Matches() {
 
   if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
 
-  // Enrich matches with team data
-  const enrichedMatches = matches?.map((m: any) => ({
-    ...m,
-    homeTeam: teams?.find((t: any) => t.id === m.homeTeamId),
-    awayTeam: teams?.find((t: any) => t.id === m.awayTeamId),
-  }))?.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const enrichedMatches = matches
+    ?.map((match) => ({
+      ...match,
+      homeTeam: teams?.find((team) => team.id === match.homeTeamId),
+      awayTeam: teams?.find((team) => team.id === match.awayTeamId),
+    }))
+    .filter((match) => match.homeTeam && match.awayTeam)
+    .sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
 
   const filteredMatches = enrichedMatches?.filter((m: any) => {
     if (filter === 'all') return true;
