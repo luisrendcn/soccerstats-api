@@ -71,6 +71,7 @@ export interface IStorage {
     email: string;
     password: string;
     name: string;
+    requestedRole: string;
   }): Promise<RegistrationRequest>;
   approveRegistrationRequest(id: number, adminId: number): Promise<User | undefined>;
   rejectRegistrationRequest(id: number, adminId: number): Promise<RegistrationRequest | undefined>;
@@ -268,6 +269,7 @@ export class DatabaseStorage implements IStorage {
     email: string;
     password: string;
     name: string;
+    requestedRole: string;
   }): Promise<RegistrationRequest> {
     const [created] = await db
       .insert(registrationRequests)
@@ -314,7 +316,7 @@ export class DatabaseStorage implements IStorage {
           email: request.email,
           password: request.password,
           name: request.name,
-          role: "public",
+          role: request.requestedRole || "team",
           isActive: true,
         })
         .returning();

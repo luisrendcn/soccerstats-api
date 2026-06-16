@@ -41,6 +41,11 @@ export default function Login() {
             <h1 className="text-2xl font-bold">Soccer Stats</h1>
           </div>
 
+          <div className="mb-6 rounded-xl border border-muted bg-muted/30 p-3 text-sm text-muted-foreground">
+            El acceso público no requiere iniciar sesión. Esta entrada es sólo
+            para usuarios con rol aprobado por el administrador.
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -83,12 +88,12 @@ export default function Login() {
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
-            ¿No tienes cuenta?{" "}
+            ¿Necesitas cumplir un rol?{" "}
             <button
               onClick={() => setLocation("/register")}
               className="text-primary hover:underline font-semibold"
             >
-              Regístrate aquí
+              Solicita acceso
             </button>
           </div>
 

@@ -52,6 +52,7 @@ vi.mock('../storage', () => {
     createRegistrationRequest: async (registration: any) => ({
       id: 1,
       ...registration,
+      requestedRole: registration.requestedRole || 'team',
       status: 'pending',
       requestedAt: new Date(),
       reviewedAt: null,
@@ -62,7 +63,7 @@ vi.mock('../storage', () => {
       email: 'approved@example.com',
       password: 'hidden',
       name: 'Approved User',
-      role: 'public',
+      role: 'team',
       teamId: null,
       isActive: true,
     }),
@@ -71,6 +72,7 @@ vi.mock('../storage', () => {
       email: 'rejected@example.com',
       password: 'hidden',
       name: 'Rejected User',
+      requestedRole: 'team',
       status: 'rejected',
       requestedAt: new Date(),
       reviewedAt: new Date(),
@@ -363,6 +365,7 @@ describe('Authorization edge cases', () => {
       name: 'Pending User',
       password: 'secret123',
       confirmPassword: 'secret123',
+      requestedRole: 'team',
     });
 
     expect(register.status).toBe(202);
@@ -371,6 +374,7 @@ describe('Authorization edge cases', () => {
       expect.objectContaining({
         email: 'pending@example.com',
         name: 'Pending User',
+        requestedRole: 'team',
       }),
     );
     expect(createUser).not.toHaveBeenCalled();
@@ -421,6 +425,7 @@ describe('Authorization edge cases', () => {
       name: 'Pending User',
       password: 'secret123',
       confirmPassword: 'secret123',
+      requestedRole: 'team',
     });
 
     expect(res.status).toBe(409);

@@ -180,11 +180,16 @@ app.use((req, res, next) => {
         email text NOT NULL UNIQUE,
         password text NOT NULL,
         name text NOT NULL,
+        requested_role text NOT NULL DEFAULT 'team',
         status text NOT NULL DEFAULT 'pending',
         requested_at timestamp DEFAULT now(),
         reviewed_at timestamp,
         reviewed_by integer
       )
+    `);
+    await db.execute(sql`
+      ALTER TABLE registration_requests
+      ADD COLUMN IF NOT EXISTS requested_role text NOT NULL DEFAULT 'team'
     `);
     const count = await db.execute(sql`SELECT count(*) FROM teams`);
     console.log("Migration complete, teams count query result:", count);

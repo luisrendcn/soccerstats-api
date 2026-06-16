@@ -71,6 +71,25 @@ export default function Home() {
           </div>
         )}
 
+        {!auth && (
+          <div className="mb-6 rounded-xl border border-primary/10 bg-card p-4 shadow-sm">
+            <p className="text-sm font-semibold text-foreground">
+              Estás navegando como público
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Puedes ver torneos, equipos, calendario y resultados. Si quieres
+              cumplir un rol como gestor, equipo o árbitro, comunícate con el
+              administrador al 3507803134 o solicita acceso.
+            </p>
+            <Link
+              href="/register"
+              className="mt-3 inline-block text-sm font-bold text-primary hover:underline"
+            >
+              Solicitar un rol
+            </Link>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-display">{t('recentResults')}</h2>
           <Link href="/matches" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">{t('viewSchedule')}</Link>

@@ -81,12 +81,13 @@ export async function registerRoutes(
         email,
         name: input.name.trim(),
         password: hashPassword(input.password),
+        requestedRole: input.requestedRole,
       });
 
       res.status(202).json({
         status: "pending",
         message:
-          "Solicitud enviada. Un administrador debe aprobarla antes de que puedas ingresar.",
+          "Solicitud enviada. Un administrador debe aprobar el rol solicitado antes de que puedas ingresar.",
       });
     } catch (err) {
       if (err instanceof z.ZodError) {

@@ -79,6 +79,7 @@ export default function AdminUsers() {
   const [reviewRequest, setReviewRequest] = useState<{
     id: number;
     name: string;
+    requestedRole: string;
     action: "approve" | "reject";
   } | null>(null);
   const [deleteUser, setDeleteUser] = useState<{
@@ -263,6 +264,12 @@ export default function AdminUsers() {
                 <p className="font-medium">{request.name}</p>
                 <p className="text-xs text-muted-foreground">{request.email}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
+                  Rol solicitado:{" "}
+                  <span className="font-semibold">
+                    {roleLabel(request.requestedRole || "team")}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   Solicitó acceso:{" "}
                   {request.requestedAt
                     ? new Date(request.requestedAt).toLocaleString()
@@ -276,6 +283,7 @@ export default function AdminUsers() {
                       setReviewRequest({
                         id: request.id,
                         name: request.name,
+                        requestedRole: request.requestedRole || "team",
                         action: "approve",
                       })
                     }
@@ -291,6 +299,7 @@ export default function AdminUsers() {
                       setReviewRequest({
                         id: request.id,
                         name: request.name,
+                        requestedRole: request.requestedRole || "team",
                         action: "reject",
                       })
                     }
@@ -603,7 +612,7 @@ export default function AdminUsers() {
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {reviewRequest?.action === "approve"
-                  ? `¿Deseas crear la cuenta de ${reviewRequest.name} y permitirle ingresar?`
+                  ? `¿Deseas crear la cuenta de ${reviewRequest.name} como ${roleLabel(reviewRequest.requestedRole)} y permitirle ingresar?`
                   : `¿Deseas rechazar la solicitud de ${reviewRequest?.name}? Este correo no podrá enviar otra solicitud.`}
               </AlertDialogDescription>
             </AlertDialogHeader>

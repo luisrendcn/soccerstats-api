@@ -5,8 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserPlus } from "lucide-react";
+
+const REQUESTABLE_ROLES = [
+  { value: "tournament_manager", label: "Gestor de torneos" },
+  { value: "team", label: "Equipo" },
+  { value: "referee", label: "Árbitro" },
+] as const;
+
+type RequestableRole = (typeof REQUESTABLE_ROLES)[number]["value"];
 
 export default function Register() {
   const [, setLocation] = useLocation();
@@ -18,6 +27,7 @@ export default function Register() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [requestedRole, setRequestedRole] = useState<RequestableRole>("team");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +65,7 @@ export default function Register() {
         name,
         password,
         confirmPassword,
+        requestedRole,
       });
       toast({ title: "Solicitud enviada", description: response.message });
       setRequestSent(true);
@@ -73,7 +84,13 @@ export default function Register() {
         <div className="p-8">
           <div className="flex items-center justify-center gap-2 mb-8">
             <UserPlus className="w-6 h-6 text-primary" />
-            <h1 className="text-2xl font-bold">Crear Cuenta</h1>
+            <h1 className="text-2xl font-bold">Solicitar un rol</h1>
+          </div>
+
+          <div className="mb-6 rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm text-muted-foreground">
+            La app funciona como público sin cuenta. Si necesitas cumplir un
+            rol dentro de la plataforma, solicita acceso aquí o comunícate con
+            el administrador al <span className="font-semibold text-foreground">3507803134</span>.
           </div>
 
           {requestSent ? (
@@ -82,11 +99,11 @@ export default function Register() {
                 <h2 className="font-semibold">Solicitud en espera</h2>
                 <p className="mt-2 text-sm">
                   Un administrador debe aprobar tu cuenta antes de que puedas
-                  iniciar sesión.
+                  iniciar sesión con el rol solicitado.
                 </p>
               </div>
-              <Button className="w-full" onClick={() => setLocation("/login")}>
-                Volver al inicio de sesión
+              <Button className="w-full" onClick={() => setLocation("/")}>
+                Volver a la app pública
               </Button>
             </div>
           ) : (
@@ -101,6 +118,27 @@ export default function Register() {
                 onChange={(e) => setName(e.target.value)}
                 required
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="requestedRole">Rol que deseas cumplir</Label>
+              <Select
+                value={requestedRole}
+                onValueChange={(value) =>
+                  setRequestedRole(value as RequestableRole)
+                }
+              >
+                <SelectTrigger id="requestedRole">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {REQUESTABLE_ROLES.map((role) => (
+                    <SelectItem key={role.value} value={role.value}>
+                      {role.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
@@ -150,14 +188,14 @@ export default function Register() {
                   Creando cuenta...
                 </>
               ) : (
-                "Registrarse"
+                "Enviar solicitud"
               )}
             </Button>
           </form>
           )}
 
           {!requestSent && <div className="mt-6 text-center text-sm text-muted-foreground">
-            ¿Ya tienes cuenta?{" "}
+            ¿Ya tienes una cuenta aprobada?{" "}
             <button
               onClick={() => setLocation("/login")}
               className="text-primary hover:underline font-semibold"

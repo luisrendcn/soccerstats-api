@@ -57,6 +57,7 @@ export const registrationRequests = pgTable("registration_requests", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
+  requestedRole: text("requested_role").notNull().default("team"),
   status: text("status").notNull().default("pending"),
   requestedAt: timestamp("requested_at").defaultNow(),
   reviewedAt: timestamp("reviewed_at"),
@@ -176,6 +177,9 @@ export const loginSchema = z.object({
 
 export const registerSchema = insertUserSchema.omit({ role: true, teamId: true, isActive: true }).extend({
   confirmPassword: z.string(),
+  requestedRole: z.enum(["tournament_manager", "team", "referee"], {
+    message: "Selecciona un rol válido",
+  }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Las contraseñas no coinciden",
   path: ["confirmPassword"],

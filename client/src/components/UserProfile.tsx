@@ -20,7 +20,7 @@ export function UserProfile() {
   const { data: registrationRequests } = useRegistrationRequests(isAdmin);
   const pendingCount = registrationRequests?.length || 0;
 
-  if (isLoading) {
+  if (isLoading && auth !== null) {
     return <Loader2 className="w-4 h-4 animate-spin" />;
   }
 
@@ -29,9 +29,9 @@ export function UserProfile() {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => setLocation("/login")}
+        onClick={() => setLocation("/register")}
       >
-        Iniciar Sesión
+        Solicitar rol
       </Button>
     );
   }
