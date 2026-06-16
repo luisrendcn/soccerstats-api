@@ -108,6 +108,7 @@ export const ROLE_PERMISSIONS = {
     users: [],
     teams: ["read"],
     players: ["read"],
+    goals: ["read"],
     matches: ["read"],
     tournaments: ["read"],
   },

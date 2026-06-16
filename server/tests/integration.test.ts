@@ -261,6 +261,37 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(enrollTeam).toHaveBeenCalledWith(42, 2);
   });
 
+  it('lets a tournament manager manage tournaments they created', async () => {
+    const managerApp = buildApp('tournament_manager');
+    vi.spyOn(storage, 'getTournamentById').mockResolvedValueOnce({
+      id: 42,
+      name: 'Own Tournament',
+      createdBy: 4,
+    } as any);
+
+    const res = await request(managerApp)
+      .post('/api/tournaments/42/teams/new')
+      .send({ name: 'Managed Team', color: '#abcdef' });
+
+    expect(res.status).toBe(201);
+  });
+
+  it('blocks a tournament manager from managing tournaments created by someone else', async () => {
+    const managerApp = buildApp('tournament_manager');
+    vi.spyOn(storage, 'getTournamentById').mockResolvedValueOnce({
+      id: 42,
+      name: 'Other Tournament',
+      createdBy: 99,
+    } as any);
+
+    const res = await request(managerApp)
+      .post('/api/tournaments/42/teams/new')
+      .send({ name: 'Blocked Team', color: '#abcdef' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('otro usuario');
+  });
+
   it('creates matches only with teams enrolled in the tournament', async () => {
     vi.spyOn(storage, 'getTournamentTeams').mockResolvedValueOnce([
       { id: 1, name: 'Team A' },
@@ -500,9 +531,23 @@ describe('Authorization edge cases', () => {
     expect(deleteUser).not.toHaveBeenCalled();
   });
 
-  it('returns 401 when unauthenticated', async () => {
+  it('allows unauthenticated public reads', async () => {
     const unauthApp = buildApp(); // no role injected
-    const res = await request(unauthApp).get('/api/teams');
+    const teams = await request(unauthApp).get('/api/teams');
+    const matches = await request(unauthApp).get('/api/matches');
+    const standings = await request(unauthApp).get('/api/standings?tournamentId=42');
+
+    expect(teams.status).toBe(200);
+    expect(matches.status).toBe(200);
+    expect(standings.status).toBe(200);
+  });
+
+  it('requires authentication for non-public writes', async () => {
+    const unauthApp = buildApp(); // no role injected
+    const res = await request(unauthApp)
+      .post('/api/teams')
+      .send({ name: 'Private Team', color: '#123456' });
+
     expect(res.status).toBe(401);
   });
 

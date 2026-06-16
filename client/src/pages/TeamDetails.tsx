@@ -33,6 +33,7 @@ export default function TeamDetails() {
   const isPublic = auth?.userRole === 'public';
   const isTeamOwner = auth?.userRole === 'team' && auth?.teamId === teamId;
   const canManagePlayers = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager' || isTeamOwner;
+  const canDeletePlayers = auth?.userRole === "admin" || isTeamOwner;
 
   const handleAddPlayer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +120,7 @@ export default function TeamDetails() {
                 <p className="font-bold text-foreground">{player.name}</p>
                 <p className="text-xs text-muted-foreground uppercase tracking-wider">Forward</p>
               </div>
-              {canManagePlayers && (
+              {canDeletePlayers && (
                 <button title={`Remove player ${player.name}`} className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
                   if (!confirm(`Remove player ${player.name}?`)) return;
                   const response = await apiFetch(`/api/players/${player.id}`, { method: "DELETE" });

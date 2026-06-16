@@ -23,7 +23,7 @@ export default function Matches() {
   const teams = teamsResp;
   const [filter, setFilter] = useState<'all' | 'scheduled' | 'finished'>('all');
   const { data: auth } = useAuth();
-  const isPublic = auth?.userRole === 'public';
+  const canDeleteMatches = auth?.userRole === "admin";
   const isLoading = matchesLoading || teamsLoading;
 
   if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
@@ -71,7 +71,7 @@ export default function Matches() {
         {filteredMatches?.map((match: any) => (
           <div key={match.id} className="relative">
             <MatchCard match={match} />
-            {!isPublic && (
+            {canDeleteMatches && (
               <button title="Delete match" className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
                 if (!confirm('Delete this match?')) return;
                 const response = await apiFetch(`/api/matches/${match.id}`, { method: "DELETE" });

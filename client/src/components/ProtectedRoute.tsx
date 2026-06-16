@@ -5,24 +5,36 @@ import { useEffect } from "react";
 
 interface ProtectedRouteProps {
   component: React.ComponentType;
-  requiredRole?: string;
+  requiredRole?: string | string[];
+  allowPublic?: boolean;
 }
 
-export function ProtectedRoute({ component: Component, requiredRole }: ProtectedRouteProps) {
+export function ProtectedRoute({
+  component: Component,
+  requiredRole,
+  allowPublic = false,
+}: ProtectedRouteProps) {
   const { data: auth, isLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const requiredRoles = Array.isArray(requiredRole)
+    ? requiredRole
+    : requiredRole
+      ? [requiredRole]
+      : [];
+  const hasRequiredRole =
+    requiredRoles.length === 0 || (auth && requiredRoles.includes(auth.userRole));
 
   useEffect(() => {
-    if (!isLoading && !auth) {
+    if (!isLoading && !auth && !allowPublic) {
       // Redirigir al login si no está autenticado
       setLocation("/login");
-    } else if (!isLoading && auth && requiredRole && auth.userRole !== requiredRole) {
+    } else if (!isLoading && auth && !hasRequiredRole) {
       // Redirigir a home si no tiene el rol requerido
       setLocation("/");
     }
-  }, [auth, isLoading, requiredRole, setLocation]);
+  }, [allowPublic, auth, hasRequiredRole, isLoading, setLocation]);
 
-  if (isLoading) {
+  if (isLoading && !allowPublic) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -30,11 +42,11 @@ export function ProtectedRoute({ component: Component, requiredRole }: Protected
     );
   }
 
-  if (!auth) {
+  if (!auth && !allowPublic) {
     return null; // Se va a redirigir
   }
 
-  if (requiredRole && auth.userRole !== requiredRole) {
+  if (auth && !hasRequiredRole) {
     return null; // Se va a redirigir
   }
 

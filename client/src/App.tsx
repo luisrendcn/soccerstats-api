@@ -22,21 +22,23 @@ import TournamentDetails from "@/pages/TournamentDetails";
 import Settings from "@/pages/Settings";
 
 function Router() {
+  const tournamentManagers = ["admin", "tournament_manager"];
+
   return (
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      <Route path="/" component={() => <ProtectedRoute component={Home} />} />
-      <Route path="/teams" component={() => <ProtectedRoute component={Teams} />} />
-      <Route path="/teams/:id" component={() => <ProtectedRoute component={TeamDetails} />} />
-      <Route path="/matches" component={() => <ProtectedRoute component={Matches} />} />
-      <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchDetails} />} />
-      <Route path="/tournaments" component={() => <ProtectedRoute component={Tournaments} />} />
-      <Route path="/tournaments/new" component={() => <ProtectedRoute component={CreateTournament} />} />
-      <Route path="/tournaments/:id/matches/new" component={({ params }) => <ProtectedRoute component={() => <CreateMatch tournamentId={Number(params.id)} />} />} />
-      <Route path="/tournaments/:id" component={({ params }) => <ProtectedRoute component={() => <TournamentDetails tournamentId={Number(params.id)} />} />} />
+      <Route path="/" component={() => <ProtectedRoute component={Home} allowPublic />} />
+      <Route path="/teams" component={() => <ProtectedRoute component={Teams} allowPublic />} />
+      <Route path="/teams/:id" component={() => <ProtectedRoute component={TeamDetails} allowPublic />} />
+      <Route path="/matches" component={() => <ProtectedRoute component={Matches} allowPublic />} />
+      <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchDetails} allowPublic />} />
+      <Route path="/tournaments" component={() => <ProtectedRoute component={Tournaments} allowPublic />} />
+      <Route path="/tournaments/new" component={() => <ProtectedRoute component={CreateTournament} requiredRole={tournamentManagers} />} />
+      <Route path="/tournaments/:id/matches/new" component={({ params }) => <ProtectedRoute component={() => <CreateMatch tournamentId={Number(params.id)} />} requiredRole={tournamentManagers} />} />
+      <Route path="/tournaments/:id" component={({ params }) => <ProtectedRoute component={() => <TournamentDetails tournamentId={Number(params.id)} />} allowPublic />} />
       <Route path="/admin/users" component={() => <ProtectedRoute component={AdminUsers} requiredRole="admin" />} />
-      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
+      <Route path="/settings" component={() => <ProtectedRoute component={Settings} allowPublic />} />
       <Route component={NotFound} />
     </Switch>
   );

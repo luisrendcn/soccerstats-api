@@ -165,6 +165,14 @@ export default function Register() {
               Inicia sesión
             </button>
           </div>}
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-4 w-full"
+            onClick={() => setLocation("/")}
+          >
+            Continuar como público
+          </Button>
         </div>
       </Card>
     </div>

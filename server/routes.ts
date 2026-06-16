@@ -8,6 +8,7 @@ import {
   verifyPassword,
   passwordNeedsRehash,
   hasPermission,
+  ROLE_PERMISSIONS,
 } from "./auth";
 import { loginSchema, registerSchema, createTournamentSchema, updateTournamentSchema } from "@shared/schema";
 import { z } from "zod/v4";
@@ -194,8 +195,21 @@ export async function registerRoutes(
   };
 
   // Middleware para verificar permisos basado en recurso y acción
+  const hasPublicPermission = (resource: string, action: string) => {
+    const permissions = (ROLE_PERMISSIONS.public as Record<string, string[]>)[resource];
+    return permissions ? permissions.includes(action) : false;
+  };
+
   const requirePermission = (resource: string, action: string) => {
     return (req: Request, res: Response, next: NextFunction) => {
+      const userId = (req.session as any).userId;
+      if (!userId) {
+        if (hasPublicPermission(resource, action)) {
+          return next();
+        }
+        return res.status(401).json({ message: "No autenticado" });
+      }
+
       requireActiveSession(req, res, () => {
         const userRole = (req.session as any).userRole;
         if (!hasPermission(userRole, resource, action)) {
@@ -460,6 +474,31 @@ export async function registerRoutes(
     }).catch(next);
   };
 
+  const getManageableTournament = async (
+    req: Request,
+    res: Response,
+    tournamentId: number,
+  ) => {
+    const tournament = await storage.getTournamentById(tournamentId);
+    if (!tournament) {
+      res.status(404).json({ message: "Torneo no encontrado" });
+      return null;
+    }
+
+    const userRole = (req.session as any).userRole;
+    if (
+      userRole === "admin" ||
+      tournament.createdBy === (req.session as any).userId
+    ) {
+      return tournament;
+    }
+
+    res.status(403).json({
+      message: "No puedes gestionar un torneo creado por otro usuario",
+    });
+    return null;
+  };
+
   app.get("/api/tournaments", async (_req, res) => {
     try {
       const tournaments = await storage.getTournaments();
@@ -512,6 +551,9 @@ export async function registerRoutes(
   app.put("/api/tournaments/:id", requireTournamentManager, async (req, res) => {
     try {
       const tournamentId = Number(req.params.id);
+      const manageableTournament = await getManageableTournament(req, res, tournamentId);
+      if (!manageableTournament) return;
+
       const input = updateTournamentSchema.parse(req.body);
 
       // Convertir strings a Date si es necesario
@@ -536,6 +578,9 @@ export async function registerRoutes(
   app.delete("/api/tournaments/:id", requireTournamentManager, async (req, res) => {
     try {
       const tournamentId = Number(req.params.id);
+      const tournament = await getManageableTournament(req, res, tournamentId);
+      if (!tournament) return;
+
       await storage.deleteTournament(tournamentId);
       res.json({ success: true });
     } catch (err) {
@@ -546,6 +591,9 @@ export async function registerRoutes(
   app.post("/api/tournaments/:id/teams", requireTournamentManager, async (req, res) => {
     try {
       const tournamentId = Number(req.params.id);
+      const tournament = await getManageableTournament(req, res, tournamentId);
+      if (!tournament) return;
+
       const { teamId } = req.body;
 
       if (!teamId) {
@@ -562,10 +610,8 @@ export async function registerRoutes(
   app.post("/api/tournaments/:id/teams/new", requireTournamentManager, async (req, res) => {
     try {
       const tournamentId = Number(req.params.id);
-      const tournament = await storage.getTournamentById(tournamentId);
-      if (!tournament) {
-        return res.status(404).json({ message: "Torneo no encontrado" });
-      }
+      const tournament = await getManageableTournament(req, res, tournamentId);
+      if (!tournament) return;
 
       const input = api.teams.create.input.parse(req.body);
       const team = await storage.createTeam(input);
@@ -582,6 +628,9 @@ export async function registerRoutes(
   app.delete("/api/tournaments/:id/teams/:teamId", requireTournamentManager, async (req, res) => {
     try {
       const tournamentId = Number(req.params.id);
+      const tournament = await getManageableTournament(req, res, tournamentId);
+      if (!tournament) return;
+
       const teamId = Number(req.params.teamId);
 
       await storage.removeTeamFromTournament(tournamentId, teamId);
@@ -690,6 +739,14 @@ export async function registerRoutes(
       if (!tournament) {
         return res.status(404).json({ message: "Torneo no encontrado" });
       }
+      if (
+        (req.session as any).userRole === "tournament_manager" &&
+        tournament.createdBy !== (req.session as any).userId
+      ) {
+        return res.status(403).json({
+          message: "No puedes crear partidos en un torneo creado por otro usuario",
+        });
+      }
       const tournamentTeams = await storage.getTournamentTeams(input.tournamentId);
       const participantIds = new Set(tournamentTeams.map((team) => team.id));
       if (
@@ -749,6 +806,23 @@ export async function registerRoutes(
       }
 
       const input = api.matches.update.input.parse(rawBody);
+      const existingMatch = await storage.getMatch(matchId);
+      if (!existingMatch) {
+        return res.status(404).json({ message: "Match not found" });
+      }
+      if ((req.session as any).userRole === "tournament_manager") {
+        if (!existingMatch.tournamentId) {
+          return res.status(403).json({
+            message: "No puedes actualizar partidos sin torneo asociado",
+          });
+        }
+        const tournament = await getManageableTournament(
+          req,
+          res,
+          existingMatch.tournamentId,
+        );
+        if (!tournament) return;
+      }
       const match = await storage.updateMatch(matchId, input);
       res.json(match);
     } catch (err) {
@@ -775,6 +849,19 @@ export async function registerRoutes(
       const match = await storage.getMatch(input.matchId);
       if (!match) {
         return res.status(404).json({ message: "Partido no encontrado" });
+      }
+      if ((req.session as any).userRole === "tournament_manager") {
+        if (!match.tournamentId) {
+          return res.status(403).json({
+            message: "No puedes registrar goles en partidos sin torneo asociado",
+          });
+        }
+        const tournament = await getManageableTournament(
+          req,
+          res,
+          match.tournamentId,
+        );
+        if (!tournament) return;
       }
       if (![match.homeTeamId, match.awayTeamId].includes(input.teamId)) {
         return res.status(400).json({ message: "El equipo no participa en este partido" });
