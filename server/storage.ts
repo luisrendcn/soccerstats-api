@@ -74,6 +74,7 @@ export interface IStorage {
   }): Promise<RegistrationRequest>;
   approveRegistrationRequest(id: number, adminId: number): Promise<User | undefined>;
   rejectRegistrationRequest(id: number, adminId: number): Promise<RegistrationRequest | undefined>;
+  deleteRegistrationRequestsByEmail(email: string): Promise<void>;
 
   // Tournaments
   getTournaments(): Promise<Tournament[]>;
@@ -350,6 +351,12 @@ export class DatabaseStorage implements IStorage {
       )
       .returning();
     return request;
+  }
+
+  async deleteRegistrationRequestsByEmail(email: string): Promise<void> {
+    await db
+      .delete(registrationRequests)
+      .where(eq(registrationRequests.email, email));
   }
 
   /* =======================

@@ -47,6 +47,7 @@ vi.mock('../storage', () => {
     updateUser: async (id: number, updates: any) => ({ id, ...updates }),
     deleteUser: async () => {},
     getRegistrationRequestByEmail: async () => undefined,
+    deleteRegistrationRequestsByEmail: async () => {},
     getPendingRegistrationRequests: async () => [],
     createRegistrationRequest: async (registration: any) => ({
       id: 1,
@@ -470,6 +471,32 @@ describe('Authorization edge cases', () => {
     expect(res.status).toBe(200);
     expect(res.body.isActive).toBe(false);
     expect(updateUser).toHaveBeenCalledWith(8, { isActive: false });
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('permanently deletes a user and clears registration history for that email', async () => {
+    const deleteUser = vi.spyOn(storage, 'deleteUser');
+    const deleteRegistrationRequests = vi.spyOn(
+      storage,
+      'deleteRegistrationRequestsByEmail',
+    );
+
+    const res = await request(app).delete('/api/admin/users/8/permanent');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true });
+    expect(deleteUser).toHaveBeenCalledWith(8);
+    expect(deleteRegistrationRequests).toHaveBeenCalledWith('active@example.com');
+  });
+
+  it('does not allow an admin to permanently delete their own account', async () => {
+    const deleteUser = vi.spyOn(storage, 'deleteUser');
+    deleteUser.mockClear();
+
+    const res = await request(app).delete('/api/admin/users/1/permanent');
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('eliminarte a ti mismo');
     expect(deleteUser).not.toHaveBeenCalled();
   });
 

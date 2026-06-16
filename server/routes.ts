@@ -374,6 +374,27 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/admin/users/:id/permanent", requireAdmin, async (req, res) => {
+    try {
+      const userId = Number(req.params.id);
+
+      if ((req.session as any).userId === userId) {
+        return res.status(400).json({ message: "No puedes eliminarte a ti mismo" });
+      }
+
+      const user = await storage.getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+
+      await storage.deleteUser(userId);
+      await storage.deleteRegistrationRequestsByEmail(user.email);
+      res.json({ success: true });
+    } catch (err) {
+      throw err;
+    }
+  });
+
   app.put("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
     try {
       const userId = Number(req.params.id);

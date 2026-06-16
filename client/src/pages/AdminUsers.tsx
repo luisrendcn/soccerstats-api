@@ -3,6 +3,7 @@ import { Layout } from "@/components/Layout";
 import {
   useApproveRegistrationRequest,
   useCreateUser,
+  useDeleteUserPermanently,
   useRegistrationRequests,
   useRejectRegistrationRequest,
   useSetUserActive,
@@ -39,6 +40,7 @@ import {
   LockOpen,
   Plus,
   Shield,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -58,6 +60,7 @@ export default function AdminUsers() {
   const createUser = useCreateUser();
   const updateRole = useUpdateUserRole();
   const setUserActive = useSetUserActive();
+  const deleteUserPermanently = useDeleteUserPermanently();
   const approveRequest = useApproveRegistrationRequest();
   const rejectRequest = useRejectRegistrationRequest();
 
@@ -77,6 +80,11 @@ export default function AdminUsers() {
     id: number;
     name: string;
     action: "approve" | "reject";
+  } | null>(null);
+  const [deleteUser, setDeleteUser] = useState<{
+    id: number;
+    name: string;
+    email: string;
   } | null>(null);
 
   // Role change
@@ -188,6 +196,25 @@ export default function AdminUsers() {
             : "La solicitud fue rechazada",
       });
       setReviewRequest(null);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: (error as Error).message,
+      });
+    }
+  };
+
+  const handlePermanentDelete = async () => {
+    if (!deleteUser) return;
+
+    try {
+      await deleteUserPermanently.mutateAsync(deleteUser.id);
+      toast({
+        title: "Usuario eliminado",
+        description: `${deleteUser.name} fue eliminado de la base de datos`,
+      });
+      setDeleteUser(null);
     } catch (error) {
       toast({
         variant: "destructive",
@@ -442,6 +469,19 @@ export default function AdminUsers() {
                           <LockOpen className="w-4 h-4" />
                         )}
                       </button>
+                      <button
+                        onClick={() =>
+                          setDeleteUser({
+                            id: user.id,
+                            name: user.name,
+                            email: user.email,
+                          })
+                        }
+                        className="ml-2 p-1 text-red-700 transition-colors hover:text-red-900"
+                        title="Eliminar usuario de la base de datos"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -472,21 +512,38 @@ export default function AdminUsers() {
                     {user.email}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="ml-3 gap-1 text-green-700"
-                  onClick={() =>
-                    setStatusChange({
-                      id: user.id,
-                      isActive: true,
-                      name: user.name,
-                    })
-                  }
-                >
-                  <LockOpen className="h-4 w-4" />
-                  Desbloquear
-                </Button>
+                <div className="ml-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-green-700"
+                    onClick={() =>
+                      setStatusChange({
+                        id: user.id,
+                        isActive: true,
+                        name: user.name,
+                      })
+                    }
+                  >
+                    <LockOpen className="h-4 w-4" />
+                    Desbloquear
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="gap-1"
+                    onClick={() =>
+                      setDeleteUser({
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                      })
+                    }
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Eliminar
+                  </Button>
+                </div>
               </div>
             ))}
             {!blockedUsers.length && (
@@ -604,6 +661,41 @@ export default function AdminUsers() {
                   </>
                 ) : (
                   statusChange?.isActive ? "Desbloquear" : "Bloquear"
+                )}
+              </AlertDialogAction>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog
+          open={deleteUser !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleteUser(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Eliminar de la base de datos</AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Seguro que deseas eliminar definitivamente a {deleteUser?.name} (
+                {deleteUser?.email})? Esta acción borra su cuenta de la base de
+                datos y no se puede deshacer.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="flex gap-3 justify-end">
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handlePermanentDelete}
+                disabled={deleteUserPermanently.isPending}
+                className="bg-red-700 hover:bg-red-800"
+              >
+                {deleteUserPermanently.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Eliminando...
+                  </>
+                ) : (
+                  "Eliminar definitivamente"
                 )}
               </AlertDialogAction>
             </div>

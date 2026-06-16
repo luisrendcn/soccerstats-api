@@ -169,3 +169,26 @@ export function useSetUserActive() {
     },
   });
 }
+
+export function useDeleteUserPermanently() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiFetch(`/api/admin/users/${id}/permanent`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to permanently delete user");
+      }
+      return res.json() as Promise<{ success: boolean }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "registration-requests"],
+      });
+    },
+  });
+}
