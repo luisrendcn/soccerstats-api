@@ -316,7 +316,10 @@ export class DatabaseStorage implements IStorage {
           email: request.email,
           password: request.password,
           name: request.name,
-          role: request.requestedRole || "team",
+          role:
+            request.requestedRole === "team"
+              ? "team_captain"
+              : request.requestedRole || "team_captain",
           isActive: true,
         })
         .returning();

@@ -11,7 +11,7 @@ import { Loader2, UserPlus } from "lucide-react";
 
 const REQUESTABLE_ROLES = [
   { value: "tournament_manager", label: "Gestor de torneos" },
-  { value: "team", label: "Equipo" },
+  { value: "team_captain", label: "Capitán / líder de equipo" },
   { value: "referee", label: "Árbitro" },
 ] as const;
 
@@ -27,7 +27,7 @@ export default function Register() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [requestedRole, setRequestedRole] = useState<RequestableRole>("team");
+  const [requestedRole, setRequestedRole] = useState<RequestableRole>("team_captain");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

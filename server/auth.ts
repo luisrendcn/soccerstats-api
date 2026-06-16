@@ -64,7 +64,7 @@ export function passwordNeedsRehash(hashedPassword: string): boolean {
 export const ROLES = {
   ADMIN: "admin",
   TOURNAMENT_MANAGER: "tournament_manager",
-  TEAM: "team",
+  TEAM_CAPTAIN: "team_captain",
   REFEREE: "referee",
   PUBLIC: "public",
 } as const;
@@ -89,10 +89,18 @@ export const ROLE_PERMISSIONS = {
     matches: ["create", "read", "update"],
     tournaments: ["create", "read", "update"],
   },
-  team: {
+  team_captain: {
     users: ["read"],
     teams: ["read", "update"], // Solo su equipo (lectura + edición)
     players: ["create", "read", "update", "delete"], // puede gestionar su propia plantilla
+    matches: ["read"],
+    tournaments: ["read"],
+  },
+  // Legacy alias for accounts created before the role was renamed.
+  team: {
+    users: ["read"],
+    teams: ["read", "update"],
+    players: ["create", "read", "update", "delete"],
     matches: ["read"],
     tournaments: ["read"],
   },

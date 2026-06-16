@@ -74,7 +74,7 @@ export function useCreateUser() {
       name: string;
       password: string;
       role?: string;
-      teamId?: number;
+      teamId?: number | null;
     }) => {
       const res = await apiFetch("/api/admin/users", {
         method: "POST",
@@ -105,7 +105,7 @@ export function useUpdateUser() {
       name?: string;
       email?: string;
       role?: string;
-      teamId?: number;
+      teamId?: number | null;
       isActive?: boolean;
     }) => {
       const res = await apiFetch(`/api/admin/users/${id}`, {

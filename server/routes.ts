@@ -16,10 +16,22 @@ import { z } from "zod/v4";
 const userRoleSchema = z.enum([
   "admin",
   "tournament_manager",
+  "team_captain",
   "team",
   "referee",
   "public",
 ]);
+
+type KnownUserRole = z.infer<typeof userRoleSchema>;
+
+const normalizeUserRole = (role: KnownUserRole): KnownUserRole =>
+  role === "team" ? "team_captain" : role;
+
+const normalizeStoredUserRole = (role: string) =>
+  role === "team" ? "team_captain" : role;
+
+const isTeamCaptainRole = (role: string) =>
+  role === "team_captain" || role === "team";
 
 async function establishSession(
   req: Request,
@@ -119,12 +131,13 @@ export async function registerRoutes(
         });
       }
 
-      await establishSession(req, user);
+      const normalizedUser = { ...user, role: normalizeStoredUserRole(user.role) };
+      await establishSession(req, normalizedUser);
       res.json({
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        role: normalizedUser.role,
         teamId: user.teamId ?? null,
       });
     } catch (err) {
@@ -164,7 +177,7 @@ export async function registerRoutes(
       });
     }
 
-    (req.session as any).userRole = user.role;
+    (req.session as any).userRole = normalizeStoredUserRole(user.role);
     (req.session as any).teamId = user.teamId ?? null;
     res.locals.authUser = user;
     next();
@@ -176,7 +189,7 @@ export async function registerRoutes(
       userId: (req.session as any).userId,
       email: user.email,
       name: user.name,
-      userRole: (req.session as any).userRole,
+      userRole: normalizeStoredUserRole((req.session as any).userRole),
       teamId: (req.session as any).teamId || null,
     });
   });
@@ -327,7 +340,7 @@ export async function registerRoutes(
         email: email,
         password: hashPassword(password),
         name: name,
-        role: validRole.data,
+        role: normalizeUserRole(validRole.data),
         teamId: req.body.teamId ?? null,
       });
 
@@ -382,7 +395,11 @@ export async function registerRoutes(
         }
       }
 
-      const user = await storage.updateUser(userId, updates);
+      const normalizedUpdates = { ...updates };
+      if (updates.role) {
+        normalizedUpdates.role = normalizeUserRole(updates.role);
+      }
+      const user = await storage.updateUser(userId, normalizedUpdates);
       if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
       const { password, ...safeUser } = user;
       res.json(safeUser);
@@ -471,7 +488,9 @@ export async function registerRoutes(
         }
       }
 
-      const user = await storage.updateUser(userId, { role: parsedRole.data });
+      const user = await storage.updateUser(userId, {
+        role: normalizeUserRole(parsedRole.data),
+      });
       const { password, ...safeUser } = user;
       res.json(safeUser);
     } catch (err) {
@@ -709,12 +728,13 @@ export async function registerRoutes(
   // List ALL players (team users only see their own roster)
   app.get("/api/players", requirePermission("players", "read"), async (req, res) => {
     const userRole = (req.session as any).userRole;
-    if (userRole === "team") {
+    if (isTeamCaptainRole(userRole)) {
       const teamId = (req.session as any).teamId;
       if (teamId) {
         const players = await storage.getPlayers(teamId);
         return res.json(players);
       }
+      return res.json([]);
     }
     const players = await storage.getPlayers();
     res.json(players);
@@ -724,7 +744,7 @@ export async function registerRoutes(
   app.get(api.players.list.path, requirePermission("players", "read"), async (req, res) => {
     const teamId = Number(req.params.teamId);
     const userRole = (req.session as any).userRole;
-    if (userRole === "team") {
+    if (isTeamCaptainRole(userRole)) {
       const myTeam = (req.session as any).teamId;
       if (teamId !== myTeam) {
         return res.status(403).json({ message: "No puedes ver jugadores de otro equipo" });
@@ -737,9 +757,9 @@ export async function registerRoutes(
   app.post(api.players.create.path, requirePermission("players", "create"), async (req, res) => {
     try {
       const input = api.players.create.input.parse(req.body);
-      // ownership: team role may only add to their own team
+      // ownership: team captain may only add to their own team
       const userRole = (req.session as any).userRole;
-      if (userRole === "team") {
+      if (isTeamCaptainRole(userRole)) {
         const myTeam = (req.session as any).teamId;
         if (input.teamId !== myTeam) {
           return res.status(403).json({ message: "No puedes crear jugadores para otro equipo" });
@@ -831,7 +851,7 @@ export async function registerRoutes(
     const id = Number(req.params.id);
     // if team owner, ensure player belongs to their team
     const userRole = (req.session as any).userRole;
-    if (userRole === "team") {
+    if (isTeamCaptainRole(userRole)) {
       const myTeam = (req.session as any).teamId;
       const player = await storage.getPlayer(id);
       if (player && player.teamId !== myTeam) {

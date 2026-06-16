@@ -18,6 +18,15 @@ export default function Home() {
   const [showWelcome, setShowWelcome] = useState(false);
   const matches = matchesResp;
   const teams = teamsResp;
+  const roleLabel = (role: string) =>
+    ({
+      admin: "Administrador",
+      tournament_manager: "Gestor de torneos",
+      team_captain: "Capitán/Líder de equipo",
+      team: "Capitán/Líder de equipo",
+      referee: "Árbitro",
+      public: "Público",
+    } as Record<string, string>)[role] || role;
 
   useEffect(() => {
     if (!auth?.name) return;
@@ -66,7 +75,7 @@ export default function Home() {
               {auth.name}
             </h2>
             <p className="mt-1 text-xs uppercase tracking-wider text-primary">
-              Rol: {auth.userRole}
+              Rol: {roleLabel(auth.userRole)}
             </p>
           </div>
         )}
@@ -78,8 +87,8 @@ export default function Home() {
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               Puedes ver torneos, equipos, calendario y resultados. Si quieres
-              cumplir un rol como gestor, equipo o árbitro, comunícate con el
-              administrador al 3507803134 o solicita acceso.
+              cumplir un rol como gestor, capitán/líder de equipo o árbitro,
+              comunícate con el administrador al 3507803134 o solicita acceso.
             </p>
             <Link
               href="/register"

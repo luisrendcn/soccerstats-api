@@ -19,6 +19,15 @@ export function UserProfile() {
   const isAdmin = auth?.userRole === "admin";
   const { data: registrationRequests } = useRegistrationRequests(isAdmin);
   const pendingCount = registrationRequests?.length || 0;
+  const roleLabel = (role: string) =>
+    ({
+      admin: "Administrador",
+      tournament_manager: "Gestor de torneos",
+      team_captain: "Capitán/Líder",
+      team: "Capitán/Líder",
+      referee: "Árbitro",
+      public: "Público",
+    } as Record<string, string>)[role] || role;
 
   if (isLoading && auth !== null) {
     return <Loader2 className="w-4 h-4 animate-spin" />;
@@ -55,7 +64,7 @@ export function UserProfile() {
               {auth.name}
             </span>
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              {auth.userRole}
+              {roleLabel(auth.userRole)}
             </span>
           </span>
           {pendingCount > 0 && (
@@ -72,7 +81,7 @@ export function UserProfile() {
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-          Rol: <span className="capitalize font-semibold">{auth.userRole}</span>
+          Rol: <span className="font-semibold">{roleLabel(auth.userRole)}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {auth.userRole === "admin" && (

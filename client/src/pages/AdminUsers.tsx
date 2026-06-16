@@ -7,9 +7,11 @@ import {
   useRegistrationRequests,
   useRejectRegistrationRequest,
   useSetUserActive,
+  useUpdateUser,
   useUpdateUserRole,
   useUsers,
 } from "@/hooks/use-admin";
+import { useTeams } from "@/hooks/use-teams";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,17 +49,22 @@ import {
 const ROLES = [
   { value: "admin", label: "Administrador" },
   { value: "tournament_manager", label: "Gestor de Torneos" },
-  { value: "team", label: "Equipo" },
+  { value: "team_captain", label: "Capitán/Líder de equipo" },
   { value: "referee", label: "Árbitro" },
   { value: "public", label: "Público" },
 ];
 
+const isTeamCaptainRole = (roleValue: string) =>
+  roleValue === "team_captain" || roleValue === "team";
+
 export default function AdminUsers() {
   const { toast } = useToast();
   const { data: users, isLoading } = useUsers();
+  const { data: teams } = useTeams(1, 1000);
   const { data: registrationRequests, isLoading: requestsLoading } =
     useRegistrationRequests();
   const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
   const updateRole = useUpdateUserRole();
   const setUserActive = useSetUserActive();
   const deleteUserPermanently = useDeleteUserPermanently();
@@ -70,6 +77,7 @@ export default function AdminUsers() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("public");
+  const [teamId, setTeamId] = useState("none");
 
   const [statusChange, setStatusChange] = useState<{
     id: number;
@@ -110,6 +118,8 @@ export default function AdminUsers() {
         name,
         password,
         role,
+        teamId:
+          isTeamCaptainRole(role) && teamId !== "none" ? Number(teamId) : null,
       });
       toast({
         title: "Éxito",
@@ -119,6 +129,7 @@ export default function AdminUsers() {
       setName("");
       setPassword("");
       setRole("public");
+      setTeamId("none");
       setOpenCreate(false);
     } catch (error) {
       toast({
@@ -132,6 +143,28 @@ export default function AdminUsers() {
   const handleChangeRole = (userId: number, newRole: string) => {
     setRoleChangeId(userId);
     setRoleChangeValue(newRole);
+  };
+
+  const handleAssignTeam = async (userId: number, newTeamId: string) => {
+    try {
+      await updateUser.mutateAsync({
+        id: userId,
+        teamId: newTeamId === "none" ? null : Number(newTeamId),
+      });
+      toast({
+        title: "Equipo asignado",
+        description:
+          newTeamId === "none"
+            ? "El usuario quedó sin equipo asignado"
+            : "El capitán/líder ya puede gestionar ese equipo",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: (error as Error).message,
+      });
+    }
   };
 
   const confirmRoleChange = async () => {
@@ -236,6 +269,7 @@ export default function AdminUsers() {
   }
 
   const roleLabel = (roleValue: string) => {
+    if (roleValue === "team") return "Capitán/Líder de equipo";
     return ROLES.find((r) => r.value === roleValue)?.label || roleValue;
   };
   const activeUsers = users?.filter((user) => user.isActive) || [];
@@ -267,7 +301,7 @@ export default function AdminUsers() {
                 <p className="mt-1 text-xs text-muted-foreground">
                   Rol solicitado:{" "}
                   <span className="font-semibold">
-                    {roleLabel(request.requestedRole || "team")}
+                    {roleLabel(request.requestedRole || "team_captain")}
                   </span>
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -284,7 +318,7 @@ export default function AdminUsers() {
                       setReviewRequest({
                         id: request.id,
                         name: request.name,
-                        requestedRole: request.requestedRole || "team",
+                        requestedRole: request.requestedRole || "team_captain",
                         action: "approve",
                       })
                     }
@@ -300,7 +334,7 @@ export default function AdminUsers() {
                       setReviewRequest({
                         id: request.id,
                         name: request.name,
-                        requestedRole: request.requestedRole || "team",
+                        requestedRole: request.requestedRole || "team_captain",
                         action: "reject",
                       })
                     }
@@ -375,7 +409,13 @@ export default function AdminUsers() {
 
                 <div className="space-y-2">
                   <Label htmlFor="role">Rol</Label>
-                  <Select value={role} onValueChange={setRole}>
+                  <Select
+                    value={role}
+                    onValueChange={(value) => {
+                      setRole(value);
+                      if (!isTeamCaptainRole(value)) setTeamId("none");
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -388,6 +428,25 @@ export default function AdminUsers() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {isTeamCaptainRole(role) && (
+                  <div className="space-y-2">
+                    <Label htmlFor="teamId">Equipo asignado</Label>
+                    <Select value={teamId} onValueChange={setTeamId}>
+                      <SelectTrigger id="teamId">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin equipo todavía</SelectItem>
+                        {teams?.map((team) => (
+                          <SelectItem key={team.id} value={String(team.id)}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <Button
                   type="submit"
@@ -430,7 +489,9 @@ export default function AdminUsers() {
                     </td>
                     <td className="px-4 py-3">
                       <Select
-                        value={user.role}
+                        value={
+                          user.role === "team" ? "team_captain" : user.role
+                        }
                         onValueChange={(newRole) => handleChangeRole(user.id, newRole)}
                         disabled={!user.isActive}
                       >
@@ -445,6 +506,36 @@ export default function AdminUsers() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {isTeamCaptainRole(user.role) && (
+                        <div className="mt-2">
+                          <Select
+                            value={
+                              user.teamId ? String(user.teamId) : "none"
+                            }
+                            onValueChange={(newTeamId) =>
+                              handleAssignTeam(user.id, newTeamId)
+                            }
+                            disabled={!user.isActive || updateUser.isPending}
+                          >
+                            <SelectTrigger className="h-8 w-44">
+                              <SelectValue placeholder="Equipo asignado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">
+                                Sin equipo asignado
+                              </SelectItem>
+                              {teams?.map((team) => (
+                                <SelectItem
+                                  key={team.id}
+                                  value={String(team.id)}
+                                >
+                                  {team.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span

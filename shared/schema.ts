@@ -45,8 +45,8 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
-  role: text("role").notNull().default("public"), // admin, tournament_manager, team, referee, public
-  teamId: integer("team_id"), // For team and referee roles
+  role: text("role").notNull().default("public"), // admin, tournament_manager, team_captain, referee, public
+  teamId: integer("team_id"), // For team_captain and referee roles
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -57,7 +57,7 @@ export const registrationRequests = pgTable("registration_requests", {
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
   name: text("name").notNull(),
-  requestedRole: text("requested_role").notNull().default("team"),
+  requestedRole: text("requested_role").notNull().default("team_captain"),
   status: text("status").notNull().default("pending"),
   requestedAt: timestamp("requested_at").defaultNow(),
   reviewedAt: timestamp("reviewed_at"),
@@ -177,7 +177,7 @@ export const loginSchema = z.object({
 
 export const registerSchema = insertUserSchema.omit({ role: true, teamId: true, isActive: true }).extend({
   confirmPassword: z.string(),
-  requestedRole: z.enum(["tournament_manager", "team", "referee"], {
+  requestedRole: z.enum(["tournament_manager", "team_captain", "referee"], {
     message: "Selecciona un rol válido",
   }),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -202,7 +202,7 @@ export type RegistrationRequest = typeof registrationRequests.$inferSelect;
 export type InsertRegistrationRequest = z.infer<typeof insertRegistrationRequestSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
-export type UserRole = "admin" | "tournament_manager" | "team" | "referee" | "public";
+export type UserRole = "admin" | "tournament_manager" | "team_captain" | "team" | "referee" | "public";
 export type Team = typeof teams.$inferSelect;
 export type InsertTeam = z.infer<typeof insertTeamSchema>;
 export type Player = typeof players.$inferSelect;

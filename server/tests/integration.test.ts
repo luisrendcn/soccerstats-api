@@ -37,7 +37,7 @@ vi.mock('../storage', () => {
         email: 'active@example.com',
         password: 'unused',
         name: 'Active User',
-        role: isTeamUser ? 'team' : roleById[id] || 'public',
+        role: isTeamUser ? 'team_captain' : roleById[id] || 'public',
         teamId: isTeamUser ? id - 10_000 : null,
         isActive: true,
       };
@@ -52,7 +52,7 @@ vi.mock('../storage', () => {
     createRegistrationRequest: async (registration: any) => ({
       id: 1,
       ...registration,
-      requestedRole: registration.requestedRole || 'team',
+      requestedRole: registration.requestedRole || 'team_captain',
       status: 'pending',
       requestedAt: new Date(),
       reviewedAt: null,
@@ -63,7 +63,7 @@ vi.mock('../storage', () => {
       email: 'approved@example.com',
       password: 'hidden',
       name: 'Approved User',
-      role: 'team',
+      role: 'team_captain',
       teamId: null,
       isActive: true,
     }),
@@ -72,7 +72,7 @@ vi.mock('../storage', () => {
       email: 'rejected@example.com',
       password: 'hidden',
       name: 'Rejected User',
-      requestedRole: 'team',
+      requestedRole: 'team_captain',
       status: 'rejected',
       requestedAt: new Date(),
       reviewedAt: new Date(),
@@ -130,7 +130,7 @@ function buildApp(role?: string, teamId?: number | null) {
         tournament_manager: 4,
       };
       (req.session as any).userId =
-        role === 'team' ? 10_000 + (teamId || 0) : userIdByRole[role];
+        role === 'team_captain' ? 10_000 + (teamId || 0) : userIdByRole[role];
       (req.session as any).userRole = role;
       if (teamId !== undefined) {
         (req.session as any).teamId = teamId;
@@ -208,8 +208,8 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(res.body).toHaveProperty('name', 'New Player');
   });
 
-  it('team-role user can only add players to their own team', async () => {
-    const teamApp = buildApp('team', 5);
+  it('team captain can only add players to their own team', async () => {
+    const teamApp = buildApp('team_captain', 5);
     // permit create
     vi.spyOn(auth, 'hasPermission').mockReturnValue(true);
     let res = await request(teamApp).post('/api/players').send({ teamId: 5, name: 'Own', number: 1 });
@@ -218,8 +218,8 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(res.status).toBe(403);
   });
 
-  it('team-role user sees only their team players when listing all', async () => {
-    const teamApp = buildApp('team', 7);
+  it('team captain sees only their team players when listing all', async () => {
+    const teamApp = buildApp('team_captain', 7);
     vi.spyOn(auth, 'hasPermission').mockReturnValue(true);
     const res = await request(teamApp).get('/api/players');
     expect(res.status).toBe(200);
@@ -365,7 +365,7 @@ describe('Authorization edge cases', () => {
       name: 'Pending User',
       password: 'secret123',
       confirmPassword: 'secret123',
-      requestedRole: 'team',
+      requestedRole: 'team_captain',
     });
 
     expect(register.status).toBe(202);
@@ -374,7 +374,7 @@ describe('Authorization edge cases', () => {
       expect.objectContaining({
         email: 'pending@example.com',
         name: 'Pending User',
-        requestedRole: 'team',
+        requestedRole: 'team_captain',
       }),
     );
     expect(createUser).not.toHaveBeenCalled();
@@ -425,7 +425,7 @@ describe('Authorization edge cases', () => {
       name: 'Pending User',
       password: 'secret123',
       confirmPassword: 'secret123',
-      requestedRole: 'team',
+      requestedRole: 'team_captain',
     });
 
     expect(res.status).toBe(409);
@@ -613,7 +613,7 @@ describe('Authorization edge cases', () => {
 
     const res = await request(app)
       .put('/api/admin/users/1/role')
-      .send({ role: 'team' });
+      .send({ role: 'team_captain' });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toContain('otro administrador activo');
@@ -646,19 +646,19 @@ describe('Authorization edge cases', () => {
       email: 'admin@example.com',
       password: 'hidden',
       name: 'Admin',
-      role: 'team',
+      role: 'team_captain',
       teamId: null,
       isActive: true,
     } as any);
 
     const res = await request(app)
       .put('/api/admin/users/1/role')
-      .send({ role: 'team' });
+      .send({ role: 'team_captain' });
 
     expect(res.status).toBe(200);
-    expect(res.body.role).toBe('team');
+    expect(res.body.role).toBe('team_captain');
     expect(res.body.password).toBeUndefined();
-    expect(updateUser).toHaveBeenCalledWith(1, { role: 'team' });
+    expect(updateUser).toHaveBeenCalledWith(1, { role: 'team_captain' });
   });
 
   it('allows unauthenticated public reads', async () => {

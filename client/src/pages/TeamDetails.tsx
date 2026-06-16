@@ -31,7 +31,7 @@ export default function TeamDetails() {
   const [playerNumber, setPlayerNumber] = useState("");
   const { data: auth } = useAuth();
   const isPublic = auth?.userRole === 'public';
-  const isTeamOwner = auth?.userRole === 'team' && auth?.teamId === teamId;
+  const isTeamOwner = (auth?.userRole === 'team_captain' || auth?.userRole === 'team') && auth?.teamId === teamId;
   const canManagePlayers = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager' || isTeamOwner;
   const canDeletePlayers = auth?.userRole === "admin" || isTeamOwner;
 

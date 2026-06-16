@@ -122,10 +122,10 @@ describe.skipIf(process.env.RUN_REAL_DB_TESTS !== 'true')('Integration with real
     expect(list.body.some((p: any) => p.id === createdPlayerId)).toBe(true);
   });
 
-  it('team-role user can manage only own players (real db)', async () => {
+  it('team captain can manage only own players (real db)', async () => {
     expect(createdTeamId).not.toBeNull();
     // create an app as team owner
-    const teamApp = makeApp('team', createdTeamId || undefined);
+    const teamApp = makeApp('team_captain', createdTeamId || undefined);
     // try creating for own team
     const ok = await request(teamApp).post('/api/players').send({ teamId: createdTeamId, name: 'Owned', number: 7 });
     expect(ok.status).toBe(201);
