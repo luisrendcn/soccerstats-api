@@ -355,11 +355,31 @@ export async function registerRoutes(
         .strict();
       const updates = updateSchema.parse(req.body);
 
-      if (
-        (req.session as any).userId === userId &&
-        updates.isActive === false
-      ) {
+      if ((req.session as any).userId === userId && updates.isActive === false) {
         return res.status(400).json({ message: "No puedes bloquearte a ti mismo" });
+      }
+
+      const existingUser = await storage.getUserById(userId);
+      if (!existingUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      if (existingUser.role === "admin" && updates.isActive === false) {
+        return res.status(400).json({ message: "No puedes bloquear a un administrador" });
+      }
+      if (existingUser.role === "admin" && updates.role && updates.role !== "admin") {
+        const allUsers = await storage.getAllUsers();
+        const hasAnotherActiveAdmin = allUsers.some(
+          (user) =>
+            user.id !== userId &&
+            user.role === "admin" &&
+            user.isActive !== false,
+        );
+        if (!hasAnotherActiveAdmin) {
+          return res.status(400).json({
+            message:
+              "Debe existir al menos otro administrador activo antes de cambiar este rol",
+          });
+        }
       }
 
       const user = await storage.updateUser(userId, updates);
@@ -378,6 +398,14 @@ export async function registerRoutes(
       // El borrado desde la interfaz bloquea la cuenta de forma reversible.
       if ((req.session as any).userId === userId) {
         return res.status(400).json({ message: "No puedes bloquearte a ti mismo" });
+      }
+
+      const existingUser = await storage.getUserById(userId);
+      if (!existingUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      if (existingUser.role === "admin") {
+        return res.status(400).json({ message: "No puedes bloquear a un administrador" });
       }
 
       const user = await storage.updateUser(userId, { isActive: false });
@@ -401,6 +429,9 @@ export async function registerRoutes(
       if (!user) {
         return res.status(404).json({ message: "Usuario no encontrado" });
       }
+      if (user.role === "admin") {
+        return res.status(400).json({ message: "No puedes eliminar a un administrador" });
+      }
 
       await storage.deleteUser(userId);
       await storage.deleteRegistrationRequestsByEmail(user.email);
@@ -418,6 +449,26 @@ export async function registerRoutes(
       const parsedRole = userRoleSchema.safeParse(role);
       if (!parsedRole.success) {
         return res.status(400).json({ message: "Rol inválido" });
+      }
+
+      const existingUser = await storage.getUserById(userId);
+      if (!existingUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      if (existingUser.role === "admin" && parsedRole.data !== "admin") {
+        const allUsers = await storage.getAllUsers();
+        const hasAnotherActiveAdmin = allUsers.some(
+          (user) =>
+            user.id !== userId &&
+            user.role === "admin" &&
+            user.isActive !== false,
+        );
+        if (!hasAnotherActiveAdmin) {
+          return res.status(400).json({
+            message:
+              "Debe existir al menos otro administrador activo antes de cambiar este rol",
+          });
+        }
       }
 
       const user = await storage.updateUser(userId, { role: parsedRole.data });

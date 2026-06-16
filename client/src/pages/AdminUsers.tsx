@@ -240,6 +240,7 @@ export default function AdminUsers() {
   };
   const activeUsers = users?.filter((user) => user.isActive) || [];
   const blockedUsers = users?.filter((user) => !user.isActive) || [];
+  const canLockOrDeleteUser = (roleValue: string) => roleValue !== "admin";
 
   return (
     <Layout title="Gestión de Usuarios">
@@ -457,40 +458,48 @@ export default function AdminUsers() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() =>
-                          setStatusChange({
-                            id: user.id,
-                            isActive: !user.isActive,
-                            name: user.name,
-                          })
-                        }
-                        className={`p-1 transition-colors ${
-                          user.isActive
-                            ? "text-red-600 hover:text-red-700"
-                            : "text-green-600 hover:text-green-700"
-                        }`}
-                        title={user.isActive ? "Bloquear usuario" : "Desbloquear usuario"}
-                      >
-                        {user.isActive ? (
-                          <Lock className="w-4 h-4" />
-                        ) : (
-                          <LockOpen className="w-4 h-4" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() =>
-                          setDeleteUser({
-                            id: user.id,
-                            name: user.name,
-                            email: user.email,
-                          })
-                        }
-                        className="ml-2 p-1 text-red-700 transition-colors hover:text-red-900"
-                        title="Eliminar usuario de la base de datos"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canLockOrDeleteUser(user.role) ? (
+                        <>
+                          <button
+                            onClick={() =>
+                              setStatusChange({
+                                id: user.id,
+                                isActive: !user.isActive,
+                                name: user.name,
+                              })
+                            }
+                            className={`p-1 transition-colors ${
+                              user.isActive
+                                ? "text-red-600 hover:text-red-700"
+                                : "text-green-600 hover:text-green-700"
+                            }`}
+                            title={user.isActive ? "Bloquear usuario" : "Desbloquear usuario"}
+                          >
+                            {user.isActive ? (
+                              <Lock className="w-4 h-4" />
+                            ) : (
+                              <LockOpen className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() =>
+                              setDeleteUser({
+                                id: user.id,
+                                name: user.name,
+                                email: user.email,
+                              })
+                            }
+                            className="ml-2 p-1 text-red-700 transition-colors hover:text-red-900"
+                            title="Eliminar usuario de la base de datos"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Protegido
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -521,38 +530,44 @@ export default function AdminUsers() {
                     {user.email}
                   </p>
                 </div>
-                <div className="ml-3 flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-1 text-green-700"
-                    onClick={() =>
-                      setStatusChange({
-                        id: user.id,
-                        isActive: true,
-                        name: user.name,
-                      })
-                    }
-                  >
-                    <LockOpen className="h-4 w-4" />
-                    Desbloquear
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="gap-1"
-                    onClick={() =>
-                      setDeleteUser({
-                        id: user.id,
-                        name: user.name,
-                        email: user.email,
-                      })
-                    }
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Eliminar
-                  </Button>
-                </div>
+                {canLockOrDeleteUser(user.role) ? (
+                  <div className="ml-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1 text-green-700"
+                      onClick={() =>
+                        setStatusChange({
+                          id: user.id,
+                          isActive: true,
+                          name: user.name,
+                        })
+                      }
+                    >
+                      <LockOpen className="h-4 w-4" />
+                      Desbloquear
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="gap-1"
+                      onClick={() =>
+                        setDeleteUser({
+                          id: user.id,
+                          name: user.name,
+                          email: user.email,
+                        })
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Eliminar
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="ml-3 text-xs text-muted-foreground">
+                    Protegido
+                  </span>
+                )}
               </div>
             ))}
             {!blockedUsers.length && (

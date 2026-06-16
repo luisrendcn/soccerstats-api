@@ -536,6 +536,131 @@ describe('Authorization edge cases', () => {
     expect(deleteUser).not.toHaveBeenCalled();
   });
 
+  it('does not allow blocking another admin account', async () => {
+    vi.spyOn(storage, 'getUserById')
+      .mockResolvedValueOnce({
+        id: 1,
+        email: 'admin@example.com',
+        password: 'hidden',
+        name: 'Admin',
+        role: 'admin',
+        teamId: null,
+        isActive: true,
+      } as any)
+      .mockResolvedValueOnce({
+        id: 9,
+        email: 'other-admin@example.com',
+        password: 'hidden',
+        name: 'Other Admin',
+        role: 'admin',
+        teamId: null,
+        isActive: true,
+      } as any);
+    const updateUser = vi.spyOn(storage, 'updateUser');
+    updateUser.mockClear();
+
+    const res = await request(app).delete('/api/admin/users/9');
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('bloquear a un administrador');
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it('does not allow permanently deleting another admin account', async () => {
+    vi.spyOn(storage, 'getUserById')
+      .mockResolvedValueOnce({
+        id: 1,
+        email: 'admin@example.com',
+        password: 'hidden',
+        name: 'Admin',
+        role: 'admin',
+        teamId: null,
+        isActive: true,
+      } as any)
+      .mockResolvedValueOnce({
+        id: 9,
+        email: 'other-admin@example.com',
+        password: 'hidden',
+        name: 'Other Admin',
+        role: 'admin',
+        teamId: null,
+        isActive: true,
+      } as any);
+    const deleteUser = vi.spyOn(storage, 'deleteUser');
+    deleteUser.mockClear();
+
+    const res = await request(app).delete('/api/admin/users/9/permanent');
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('eliminar a un administrador');
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('does not allow removing the admin role from the only active admin', async () => {
+    vi.spyOn(storage, 'getAllUsers').mockResolvedValueOnce([
+      {
+        id: 1,
+        email: 'admin@example.com',
+        password: 'hidden',
+        name: 'Only Admin',
+        role: 'admin',
+        teamId: null,
+        isActive: true,
+      },
+    ] as any);
+    const updateUser = vi.spyOn(storage, 'updateUser');
+    updateUser.mockClear();
+
+    const res = await request(app)
+      .put('/api/admin/users/1/role')
+      .send({ role: 'team' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('otro administrador activo');
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it('allows removing the admin role when another active admin remains', async () => {
+    vi.spyOn(storage, 'getAllUsers').mockResolvedValueOnce([
+      {
+        id: 1,
+        email: 'admin@example.com',
+        password: 'hidden',
+        name: 'Admin',
+        role: 'admin',
+        teamId: null,
+        isActive: true,
+      },
+      {
+        id: 9,
+        email: 'other-admin@example.com',
+        password: 'hidden',
+        name: 'Other Admin',
+        role: 'admin',
+        teamId: null,
+        isActive: true,
+      },
+    ] as any);
+    const updateUser = vi.spyOn(storage, 'updateUser').mockResolvedValueOnce({
+      id: 1,
+      email: 'admin@example.com',
+      password: 'hidden',
+      name: 'Admin',
+      role: 'team',
+      teamId: null,
+      isActive: true,
+    } as any);
+
+    const res = await request(app)
+      .put('/api/admin/users/1/role')
+      .send({ role: 'team' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe('team');
+    expect(res.body.password).toBeUndefined();
+    expect(updateUser).toHaveBeenCalledWith(1, { role: 'team' });
+  });
+
   it('allows unauthenticated public reads', async () => {
     const unauthApp = buildApp(); // no role injected
     const teams = await request(unauthApp).get('/api/teams');
