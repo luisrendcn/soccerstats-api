@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useMatches } from "@/hooks/use-matches";
 import { useTeams } from "@/hooks/use-teams";
 import { useTournaments } from "@/hooks/use-tournaments";
@@ -14,8 +15,20 @@ export default function Home() {
   const { data: teamsResp, isLoading: teamsLoading } = useTeams();
   const { data: tournaments, isLoading: tournamentsLoading } = useTournaments();
   const { data: auth } = useAuth();
+  const [showWelcome, setShowWelcome] = useState(false);
   const matches = matchesResp;
   const teams = teamsResp;
+
+  useEffect(() => {
+    if (!auth?.name) return;
+
+    setShowWelcome(true);
+    const timeout = window.setTimeout(() => {
+      setShowWelcome(false);
+    }, 6000);
+
+    return () => window.clearTimeout(timeout);
+  }, [auth?.name]);
 
   const isLoading = matchesLoading || teamsLoading || tournamentsLoading;
   const enrichedMatches = matches
@@ -46,7 +59,7 @@ export default function Home() {
     <Layout title={t('leagueOverview')}>
       {/* Recent Matches */}
       <section>
-        {auth?.name && (
+        {showWelcome && auth?.name && (
           <div className="mb-6 rounded-xl border border-primary/10 bg-primary/5 p-4">
             <p className="text-sm text-muted-foreground">Bienvenido</p>
             <h2 className="text-2xl font-display font-bold text-foreground">
