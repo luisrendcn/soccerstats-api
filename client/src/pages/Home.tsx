@@ -83,8 +83,9 @@ export default function Home() {
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               Puedes ver torneos, equipos, calendario y resultados. Si quieres
-              cumplir un rol como gestor, capitán/líder de equipo o árbitro,
-              comunícate con el administrador al 3507803134 o solicita acceso.
+              cumplir un rol como gestor de torneos, capitán/líder de equipo
+              o árbitro, comunícate con el administrador al 3507803134 o
+              solicita acceso.
             </p>
             <Link
               href="/register"
