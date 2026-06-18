@@ -194,6 +194,22 @@ export async function registerRoutes(
     });
   });
 
+  app.get("/api/bootstrap", async (_req, res) => {
+    const [teams, matches, tournaments] = await Promise.all([
+      storage.getTeams(),
+      storage.getMatches(),
+      storage.getTournaments(),
+    ]);
+
+    res.set("Cache-Control", "private, max-age=15, stale-while-revalidate=60");
+    res.json({
+      teams,
+      matches,
+      tournaments,
+      generatedAt: new Date().toISOString(),
+    });
+  });
+
   /* =======================
      USER MANAGEMENT (ADMIN ONLY)
   ======================= */

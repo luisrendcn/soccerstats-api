@@ -672,6 +672,21 @@ describe('Authorization edge cases', () => {
     expect(standings.status).toBe(200);
   });
 
+  it('returns public bootstrap data in one request', async () => {
+    const unauthApp = buildApp();
+
+    const res = await request(unauthApp).get('/api/bootstrap');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      teams: expect.any(Array),
+      matches: expect.any(Array),
+      tournaments: expect.any(Array),
+      generatedAt: expect.any(String),
+    });
+    expect(res.headers['cache-control']).toContain('max-age=15');
+  });
+
   it('requires authentication for non-public writes', async () => {
     const unauthApp = buildApp(); // no role injected
     const res = await request(unauthApp)

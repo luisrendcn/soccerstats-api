@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMatches } from "@/hooks/use-matches";
-import { useTeams } from "@/hooks/use-teams";
-import { useTournaments } from "@/hooks/use-tournaments";
+import { useBootstrap } from "@/hooks/use-bootstrap";
 import { Layout } from "@/components/Layout";
 import { MatchCard } from "@/components/MatchCard";
 import { Trophy, Loader2 } from "lucide-react";
@@ -11,13 +9,12 @@ import { useAuth } from "@/hooks/use-auth";
 
 export default function Home() {
   const { t } = useLanguage();
-  const { data: matchesResp, isLoading: matchesLoading } = useMatches();
-  const { data: teamsResp, isLoading: teamsLoading } = useTeams();
-  const { data: tournaments, isLoading: tournamentsLoading } = useTournaments();
+  const { data: bootstrap, isLoading, isFetching } = useBootstrap();
   const { data: auth } = useAuth();
   const [showWelcome, setShowWelcome] = useState(false);
-  const matches = matchesResp;
-  const teams = teamsResp;
+  const matches = bootstrap?.matches;
+  const teams = bootstrap?.teams;
+  const tournaments = bootstrap?.tournaments;
   const roleLabel = (role: string) =>
     ({
       admin: "Administrador",
@@ -39,7 +36,6 @@ export default function Home() {
     return () => window.clearTimeout(timeout);
   }, [auth?.name]);
 
-  const isLoading = matchesLoading || teamsLoading || tournamentsLoading;
   const enrichedMatches = matches
     ?.filter((match) => match.status === "finished")
     .map((match) => ({
@@ -56,7 +52,7 @@ export default function Home() {
     )
     .slice(0, 3);
 
-  if (isLoading) {
+  if (isLoading && !bootstrap) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -103,6 +99,11 @@ export default function Home() {
           <h2 className="text-lg font-display">{t('recentResults')}</h2>
           <Link href="/matches" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">{t('viewSchedule')}</Link>
         </div>
+        {isFetching && bootstrap && (
+          <p className="mb-3 text-xs text-muted-foreground">
+            Actualizando datos recientes...
+          </p>
+        )}
         
         <div className="space-y-4">
           {enrichedMatches?.map((match: any) => (

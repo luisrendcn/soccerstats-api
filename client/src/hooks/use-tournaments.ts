@@ -2,15 +2,25 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Tournament, CreateTournamentInput, UpdateTournamentInput, Team, InsertTeam } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
+import {
+  readPersistentCache,
+  writePersistentCache,
+} from "@/lib/persistentCache";
 
 export function useTournaments() {
+  const cached = readPersistentCache<Tournament[]>("tournaments");
+
   return useQuery({
     queryKey: ["tournaments"],
     queryFn: async () => {
       const res = await apiFetch("/api/tournaments", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch tournaments");
-      return res.json() as Promise<Tournament[]>;
+      const tournaments = (await res.json()) as Tournament[];
+      writePersistentCache("tournaments", tournaments);
+      return tournaments;
     },
+    initialData: cached?.data,
+    initialDataUpdatedAt: cached?.savedAt,
   });
 }
 

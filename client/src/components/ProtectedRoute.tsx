@@ -4,7 +4,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 
 interface ProtectedRouteProps {
-  component: React.ComponentType;
+  component: React.ElementType;
   requiredRole?: string | string[];
   allowPublic?: boolean;
 }

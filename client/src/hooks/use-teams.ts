@@ -2,8 +2,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertTeam, type InsertPlayer } from "@shared/routes";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
+import {
+  readPersistentCache,
+  writePersistentCache,
+} from "@/lib/persistentCache";
 
 export function useTeams(page = 1, limit = 10, search = "") {
+  const cacheKey = `teams:${page}:${limit}:${search}`;
+  const cached = readPersistentCache<Awaited<ReturnType<typeof api.teams.list.responses[200]["parse"]>>>(cacheKey);
+
   return useQuery({
     queryKey: [api.teams.list.path, page, limit, search],
     queryFn: async () => {
@@ -13,8 +20,12 @@ export function useTeams(page = 1, limit = 10, search = "") {
       if (search) params.set('search', search);
       const res = await apiFetch(`${api.teams.list.path}?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error('Failed to fetch teams');
-      return api.teams.list.responses[200].parse(await res.json());
+      const teams = api.teams.list.responses[200].parse(await res.json());
+      writePersistentCache(cacheKey, teams);
+      return teams;
     },
+    initialData: cached?.data,
+    initialDataUpdatedAt: cached?.savedAt,
 
   });
 }

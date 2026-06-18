@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -5,21 +6,30 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LanguageProvider } from "@/lib/i18n.tsx";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import NotFound from "@/pages/not-found";
+import { Loader2 } from "lucide-react";
 
-import Login from "@/pages/Login";
-import Register from "@/pages/Register";
-import Home from "@/pages/Home";
-import Teams from "@/pages/Teams";
-import TeamDetails from "@/pages/TeamDetails";
-import Matches from "@/pages/Matches";
-import MatchDetails from "@/pages/MatchDetails";
-import CreateMatch from "@/pages/CreateMatch";
-import AdminUsers from "@/pages/AdminUsers";
-import Tournaments from "@/pages/Tournaments";
-import CreateTournament from "@/pages/CreateTournament";
-import TournamentDetails from "@/pages/TournamentDetails";
-import Settings from "@/pages/Settings";
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Login = lazy(() => import("@/pages/Login"));
+const Register = lazy(() => import("@/pages/Register"));
+const Home = lazy(() => import("@/pages/Home"));
+const Teams = lazy(() => import("@/pages/Teams"));
+const TeamDetails = lazy(() => import("@/pages/TeamDetails"));
+const Matches = lazy(() => import("@/pages/Matches"));
+const MatchDetails = lazy(() => import("@/pages/MatchDetails"));
+const CreateMatch = lazy(() => import("@/pages/CreateMatch"));
+const AdminUsers = lazy(() => import("@/pages/AdminUsers"));
+const Tournaments = lazy(() => import("@/pages/Tournaments"));
+const CreateTournament = lazy(() => import("@/pages/CreateTournament"));
+const TournamentDetails = lazy(() => import("@/pages/TournamentDetails"));
+const Settings = lazy(() => import("@/pages/Settings"));
+
+function RouteFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 function Router() {
   const tournamentManagers = ["admin", "tournament_manager"];
@@ -50,7 +60,9 @@ function App() {
       <LanguageProvider>
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <Suspense fallback={<RouteFallback />}>
+            <Router />
+          </Suspense>
         </TooltipProvider>
       </LanguageProvider>
     </QueryClientProvider>

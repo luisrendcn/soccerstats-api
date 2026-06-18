@@ -2,8 +2,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertMatch, type InsertGoal } from "@shared/routes";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
+import {
+  readPersistentCache,
+  writePersistentCache,
+} from "@/lib/persistentCache";
 
 export function useMatches(page = 1, limit = 10, search = "") {
+  const cacheKey = `matches:${page}:${limit}:${search}`;
+  const cached = readPersistentCache<Awaited<ReturnType<typeof api.matches.list.responses[200]["parse"]>>>(cacheKey);
+
   return useQuery({
     queryKey: [api.matches.list.path, page, limit, search],
     queryFn: async () => {
@@ -13,8 +20,12 @@ export function useMatches(page = 1, limit = 10, search = "") {
       if (search) params.set('search', search);
       const res = await apiFetch(`${api.matches.list.path}?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch matches');
-      return api.matches.list.responses[200].parse(await res.json());
+      const matches = api.matches.list.responses[200].parse(await res.json());
+      writePersistentCache(cacheKey, matches);
+      return matches;
     },
+    initialData: cached?.data,
+    initialDataUpdatedAt: cached?.savedAt,
   });
 }
 
