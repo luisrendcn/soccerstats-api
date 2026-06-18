@@ -93,6 +93,15 @@ export default function Home() {
             >
               Solicitar un rol
             </Link>
+            <p className="mt-3 text-sm text-muted-foreground">
+              ¿Ya tienes una cuenta aprobada?{" "}
+              <Link
+                href="/login"
+                className="font-semibold text-primary hover:underline"
+              >
+                Inicia sesión
+              </Link>
+            </p>
           </div>
         )}
 
