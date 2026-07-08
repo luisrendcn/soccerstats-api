@@ -22,6 +22,49 @@ vi.mock('../storage', () => {
     softDeleteMatch: async (id: number) => ({ id }),
     getGoals: async () => [],
     createGoal: async (g: any) => ({ id: 1, ...g }),
+    getMatchHighlights: async () => [
+      {
+        id: 1,
+        matchId: 9,
+        tournamentId: 42,
+        teamId: 1,
+        playerId: null,
+        title: 'Golazo',
+        description: 'Gran jugada',
+        highlightType: 'goal',
+        minute: 12,
+        videoUrl: 'https://cdn.example.com/highlight.mp4',
+        videoPublicId: 'soccer-stats/match-highlights/9/highlight',
+        thumbnailUrl: null,
+        uploadedBy: 1,
+        createdAt: new Date(),
+        status: 'approved',
+        durationSeconds: 15,
+        fileSizeBytes: 1024,
+      },
+    ],
+    getMatchHighlight: async (id: number) => ({
+      id,
+      matchId: 9,
+      tournamentId: 42,
+      teamId: 1,
+      playerId: null,
+      title: 'Golazo',
+      description: 'Gran jugada',
+      highlightType: 'goal',
+      minute: 12,
+      videoUrl: 'https://cdn.example.com/highlight.mp4',
+      videoPublicId: 'soccer-stats/match-highlights/9/highlight',
+      thumbnailUrl: null,
+      uploadedBy: 1,
+      createdAt: new Date(),
+      status: 'pending',
+      durationSeconds: 15,
+      fileSizeBytes: 1024,
+    }),
+    createMatchHighlight: async (h: any) => ({ id: 1, createdAt: new Date(), ...h }),
+    updateMatchHighlight: async (id: number, updates: any) => ({ id, ...updates }),
+    deleteMatchHighlight: async () => {},
     getStandings: async (_tournamentId: number) => [],
     getUserByEmail: async () => undefined,
     getUserById: async (id: number) => {
@@ -336,6 +379,117 @@ describe('Integration: basic endpoints (mocked storage)', () => {
 
     expect(res.status).toBe(400);
     expect(createGoal).not.toHaveBeenCalled();
+  });
+
+  it('returns approved match highlights to unauthenticated public users', async () => {
+    const unauthApp = buildApp();
+    vi.spyOn(storage, 'getMatch').mockResolvedValueOnce({
+      id: 9,
+      tournamentId: 42,
+      homeTeamId: 1,
+      awayTeamId: 2,
+    } as any);
+    const getHighlights = vi.spyOn(storage, 'getMatchHighlights');
+
+    const res = await request(unauthApp).get('/api/matches/9/highlights');
+
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toHaveProperty('status', 'approved');
+    expect(getHighlights).toHaveBeenCalledWith(9, {
+      includeAll: false,
+      uploadedBy: undefined,
+    });
+  });
+
+  it('requires authentication to create a match highlight', async () => {
+    const unauthApp = buildApp();
+
+    const res = await request(unauthApp)
+      .post('/api/matches/9/highlights')
+      .send({
+        teamId: 1,
+        title: 'Golazo',
+        highlightType: 'goal',
+        minute: 12,
+        videoUrl: 'https://cdn.example.com/highlight.mp4',
+      });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('lets a team captain upload a pending highlight for their own match team', async () => {
+    const captainApp = buildApp('team_captain', 5);
+    vi.spyOn(storage, 'getMatch').mockResolvedValueOnce({
+      id: 11,
+      tournamentId: 42,
+      homeTeamId: 5,
+      awayTeamId: 6,
+    } as any);
+    const createHighlight = vi.spyOn(storage, 'createMatchHighlight');
+
+    const res = await request(captainApp)
+      .post('/api/matches/11/highlights')
+      .send({
+        teamId: 5,
+        title: 'Atajada clave',
+        description: 'Salvó el empate al final',
+        highlightType: 'save',
+        minute: 88,
+        videoUrl: 'https://cdn.example.com/save.mp4',
+        videoPublicId: 'soccer-stats/match-highlights/11/save',
+        durationSeconds: 20,
+        fileSizeBytes: 2048,
+      });
+
+    expect(res.status).toBe(201);
+    expect(createHighlight).toHaveBeenCalledWith(
+      expect.objectContaining({
+        matchId: 11,
+        tournamentId: 42,
+        teamId: 5,
+        uploadedBy: 10005,
+        status: 'pending',
+      }),
+    );
+  });
+
+  it('lets an admin approve a pending match highlight', async () => {
+    vi.spyOn(storage, 'getMatchHighlight').mockResolvedValueOnce({
+      id: 1,
+      matchId: 9,
+      tournamentId: 42,
+      teamId: 1,
+      playerId: null,
+      title: 'Golazo',
+      description: 'Gran jugada',
+      highlightType: 'goal',
+      minute: 12,
+      videoUrl: 'https://cdn.example.com/highlight.mp4',
+      videoPublicId: 'soccer-stats/match-highlights/9/highlight',
+      thumbnailUrl: null,
+      uploadedBy: 3,
+      createdAt: new Date(),
+      status: 'pending',
+      durationSeconds: 15,
+      fileSizeBytes: 1024,
+    } as any);
+    vi.spyOn(storage, 'getMatch').mockResolvedValueOnce({
+      id: 9,
+      tournamentId: 42,
+      homeTeamId: 1,
+      awayTeamId: 2,
+    } as any);
+    const updateHighlight = vi.spyOn(storage, 'updateMatchHighlight');
+
+    const res = await request(app)
+      .put('/api/match-highlights/1')
+      .send({ status: 'approved' });
+
+    expect(res.status).toBe(200);
+    expect(updateHighlight).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ status: 'approved' }),
+    );
   });
 });
 

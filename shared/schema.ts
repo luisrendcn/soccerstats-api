@@ -40,6 +40,26 @@ export const goals = pgTable("goals", {
   minute: integer("minute"),
 });
 
+export const matchHighlights = pgTable("match_highlights", {
+  id: serial("id").primaryKey(),
+  matchId: integer("match_id").notNull(),
+  tournamentId: integer("tournament_id").notNull(),
+  teamId: integer("team_id").notNull(),
+  playerId: integer("player_id"),
+  title: text("title").notNull(),
+  description: text("description"),
+  highlightType: text("highlight_type").notNull(),
+  minute: integer("minute").notNull(),
+  videoUrl: text("video_url").notNull(),
+  videoPublicId: text("video_public_id"),
+  thumbnailUrl: text("thumbnail_url"),
+  uploadedBy: integer("uploaded_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  status: text("status").notNull().default("pending"),
+  durationSeconds: integer("duration_seconds"),
+  fileSizeBytes: integer("file_size_bytes"),
+});
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
@@ -98,6 +118,7 @@ export const playersRelations = relations(players, ({ one, many }) => ({
     references: [teams.id],
   }),
   goals: many(goals),
+  highlights: many(matchHighlights),
 }));
 
 export const matchesRelations = relations(matches, ({ one, many }) => ({
@@ -116,6 +137,7 @@ export const matchesRelations = relations(matches, ({ one, many }) => ({
     references: [tournaments.id],
   }),
   goals: many(goals),
+  highlights: many(matchHighlights),
 }));
 
 export const goalsRelations = relations(goals, ({ one }) => ({
@@ -130,6 +152,29 @@ export const goalsRelations = relations(goals, ({ one }) => ({
   team: one(teams, {
     fields: [goals.teamId],
     references: [teams.id],
+  }),
+}));
+
+export const matchHighlightsRelations = relations(matchHighlights, ({ one }) => ({
+  match: one(matches, {
+    fields: [matchHighlights.matchId],
+    references: [matches.id],
+  }),
+  tournament: one(tournaments, {
+    fields: [matchHighlights.tournamentId],
+    references: [tournaments.id],
+  }),
+  team: one(teams, {
+    fields: [matchHighlights.teamId],
+    references: [teams.id],
+  }),
+  player: one(players, {
+    fields: [matchHighlights.playerId],
+    references: [players.id],
+  }),
+  uploader: one(users, {
+    fields: [matchHighlights.uploadedBy],
+    references: [users.id],
   }),
 }));
 
@@ -160,6 +205,10 @@ export const insertTeamSchema = createInsertSchema(teams).omit({ id: true });
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true });
 export const insertMatchSchema = createInsertSchema(matches).omit({ id: true });
 export const insertGoalSchema = createInsertSchema(goals).omit({ id: true });
+export const insertMatchHighlightSchema = createInsertSchema(matchHighlights).omit({
+  id: true,
+  createdAt: true,
+});
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertRegistrationRequestSchema = createInsertSchema(registrationRequests).omit({
   id: true,
@@ -195,6 +244,37 @@ export const createTournamentSchema = z.object({
 
 export const updateTournamentSchema = createTournamentSchema.partial();
 
+export const highlightTypeSchema = z.enum([
+  "goal",
+  "save",
+  "assist",
+  "foul",
+  "penalty",
+  "free_kick",
+  "celebration",
+  "other",
+]);
+
+export const highlightStatusSchema = z.enum(["pending", "approved", "rejected"]);
+
+export const createMatchHighlightSchema = z.object({
+  teamId: z.number().int().positive("El equipo es requerido"),
+  playerId: z.number().int().positive().nullable().optional(),
+  title: z.string().trim().min(1, "El título es obligatorio").max(120),
+  description: z.string().trim().max(500).optional().nullable(),
+  highlightType: highlightTypeSchema,
+  minute: z.number().int().min(0).max(130),
+  videoUrl: z.string().url("La URL del video no es válida"),
+  videoPublicId: z.string().trim().min(1).optional().nullable(),
+  thumbnailUrl: z.string().url().optional().nullable(),
+  durationSeconds: z.number().int().positive().optional().nullable(),
+  fileSizeBytes: z.number().int().positive().optional().nullable(),
+});
+
+export const updateMatchHighlightSchema = createMatchHighlightSchema.partial().extend({
+  status: highlightStatusSchema.optional(),
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -211,6 +291,10 @@ export type Match = typeof matches.$inferSelect;
 export type InsertMatch = z.infer<typeof insertMatchSchema>;
 export type Goal = typeof goals.$inferSelect;
 export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type MatchHighlight = typeof matchHighlights.$inferSelect;
+export type InsertMatchHighlight = z.infer<typeof insertMatchHighlightSchema>;
+export type CreateMatchHighlightInput = z.infer<typeof createMatchHighlightSchema>;
+export type UpdateMatchHighlightInput = z.infer<typeof updateMatchHighlightSchema>;
 export type Tournament = typeof tournaments.$inferSelect;
 export type InsertTournament = z.infer<typeof insertTournamentSchema>;
 export type CreateTournamentInput = z.infer<typeof createTournamentSchema>;

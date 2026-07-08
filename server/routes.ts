@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import type { NextFunction, Request, Response } from "express";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import {
@@ -10,7 +11,14 @@ import {
   hasPermission,
   ROLE_PERMISSIONS,
 } from "./auth";
-import { loginSchema, registerSchema, createTournamentSchema, updateTournamentSchema } from "@shared/schema";
+import {
+  loginSchema,
+  registerSchema,
+  createTournamentSchema,
+  updateTournamentSchema,
+  createMatchHighlightSchema,
+  updateMatchHighlightSchema,
+} from "@shared/schema";
 import { z } from "zod/v4";
 
 const userRoleSchema = z.enum([
@@ -32,6 +40,13 @@ const normalizeStoredUserRole = (role: string) =>
 
 const isTeamCaptainRole = (role: string) =>
   role === "team_captain" || role === "team";
+
+const MAX_HIGHLIGHT_MINUTE = Number(process.env.MATCH_MAX_MINUTE || 130);
+const MAX_HIGHLIGHT_DURATION_SECONDS = Number(
+  process.env.HIGHLIGHT_MAX_DURATION_SECONDS || 60,
+);
+const MAX_HIGHLIGHT_FILE_SIZE_BYTES =
+  Number(process.env.HIGHLIGHT_MAX_FILE_SIZE_MB || 50) * 1024 * 1024;
 
 async function establishSession(
   req: Request,
@@ -920,6 +935,274 @@ export async function registerRoutes(
       throw err;
     }
   });
+
+  /* =======================
+     MATCH HIGHLIGHTS
+  ======================= */
+
+  const getOptionalAuthUser = async (req: Request) => {
+    const userId = (req.session as any).userId;
+    if (!userId) return null;
+    const user = await storage.getUserById(userId);
+    if (!user || !user.isActive) return null;
+    (req.session as any).userRole = normalizeStoredUserRole(user.role);
+    (req.session as any).teamId = user.teamId ?? null;
+    return user;
+  };
+
+  const canUploadHighlight = async (req: Request, match: any) => {
+    const userRole = (req.session as any).userRole;
+    const userId = (req.session as any).userId;
+    const teamId = (req.session as any).teamId;
+
+    if (userRole === "admin" || userRole === "referee") return true;
+    if (isTeamCaptainRole(userRole)) {
+      return teamId === match.homeTeamId || teamId === match.awayTeamId;
+    }
+    if (userRole === "tournament_manager" && match.tournamentId) {
+      const tournament = await storage.getTournamentById(match.tournamentId);
+      return tournament?.createdBy === userId;
+    }
+    return false;
+  };
+
+  const canReviewHighlight = async (req: Request, tournamentId?: number | null) => {
+    const userRole = (req.session as any).userRole;
+    const userId = (req.session as any).userId;
+    if (userRole === "admin") return true;
+    if (userRole !== "tournament_manager" || !tournamentId) return false;
+    const tournament = await storage.getTournamentById(tournamentId);
+    return tournament?.createdBy === userId;
+  };
+
+  const validateHighlightInput = async (
+    input: z.infer<typeof createMatchHighlightSchema>,
+    match: any,
+    res: Response,
+  ) => {
+    if (!match.tournamentId) {
+      res.status(400).json({
+        message: "El partido debe estar asociado a un torneo",
+      });
+      return false;
+    }
+    if (![match.homeTeamId, match.awayTeamId].includes(input.teamId)) {
+      res.status(400).json({
+        message: "El equipo relacionado no participa en este partido",
+      });
+      return false;
+    }
+    if (input.playerId) {
+      const player = await storage.getPlayer(input.playerId);
+      if (!player || player.teamId !== input.teamId) {
+        res.status(400).json({
+          message: "El jugador no pertenece al equipo indicado",
+        });
+        return false;
+      }
+    }
+    if (input.minute > MAX_HIGHLIGHT_MINUTE) {
+      res.status(400).json({
+        message: `El minuto debe estar entre 0 y ${MAX_HIGHLIGHT_MINUTE}`,
+      });
+      return false;
+    }
+    if (
+      input.durationSeconds &&
+      input.durationSeconds > MAX_HIGHLIGHT_DURATION_SECONDS
+    ) {
+      res.status(400).json({
+        message: `El video no debe superar ${MAX_HIGHLIGHT_DURATION_SECONDS} segundos`,
+      });
+      return false;
+    }
+    if (
+      input.fileSizeBytes &&
+      input.fileSizeBytes > MAX_HIGHLIGHT_FILE_SIZE_BYTES
+    ) {
+      res.status(400).json({
+        message: `El video supera el tamaño máximo permitido`,
+      });
+      return false;
+    }
+    return true;
+  };
+
+  app.get("/api/matches/:matchId/highlights", async (req, res) => {
+    const matchId = Number(req.params.matchId);
+    if (!Number.isInteger(matchId) || matchId <= 0) {
+      return res.status(400).json({ message: "Partido inválido" });
+    }
+
+    const match = await storage.getMatch(matchId);
+    if (!match) {
+      return res.status(404).json({ message: "Partido no encontrado" });
+    }
+
+    const user = await getOptionalAuthUser(req);
+    const includeAll = user
+      ? await canReviewHighlight(req, match.tournamentId)
+      : false;
+    const highlights = await storage.getMatchHighlights(matchId, {
+      includeAll,
+      uploadedBy: includeAll ? undefined : user?.id,
+    });
+    res.json(highlights);
+  });
+
+  app.post(
+    "/api/matches/:matchId/highlights/upload-signature",
+    requireActiveSession,
+    async (req, res) => {
+      const matchId = Number(req.params.matchId);
+      const match = await storage.getMatch(matchId);
+      if (!match) {
+        return res.status(404).json({ message: "Partido no encontrado" });
+      }
+      if (!(await canUploadHighlight(req, match))) {
+        return res.status(403).json({
+          message: "No tienes permiso para subir jugadas de este partido",
+        });
+      }
+
+      const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+      const apiKey = process.env.CLOUDINARY_API_KEY;
+      const apiSecret = process.env.CLOUDINARY_API_SECRET;
+      if (!cloudName || !apiKey || !apiSecret) {
+        return res.status(503).json({
+          message:
+            "El almacenamiento de videos no está configurado. Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.",
+        });
+      }
+
+      const timestamp = Math.floor(Date.now() / 1000);
+      const folder = `soccer-stats/match-highlights/${matchId}`;
+      const signature = crypto
+        .createHash("sha1")
+        .update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`)
+        .digest("hex");
+
+      res.json({
+        cloudName,
+        apiKey,
+        timestamp,
+        folder,
+        signature,
+        resourceType: "video",
+        maxFileSizeBytes: MAX_HIGHLIGHT_FILE_SIZE_BYTES,
+        maxDurationSeconds: MAX_HIGHLIGHT_DURATION_SECONDS,
+      });
+    },
+  );
+
+  app.post(
+    "/api/matches/:matchId/highlights",
+    requireActiveSession,
+    async (req, res) => {
+      try {
+        const matchId = Number(req.params.matchId);
+        const match = await storage.getMatch(matchId);
+        if (!match) {
+          return res.status(404).json({ message: "Partido no encontrado" });
+        }
+        if (!(await canUploadHighlight(req, match))) {
+          return res.status(403).json({
+            message: "No tienes permiso para subir jugadas de este partido",
+          });
+        }
+
+        const input = createMatchHighlightSchema.parse(req.body);
+        if (!(await validateHighlightInput(input, match, res))) return;
+
+        const highlight = await storage.createMatchHighlight({
+          ...input,
+          matchId,
+          tournamentId: match.tournamentId!,
+          uploadedBy: (req.session as any).userId,
+          status: "pending",
+          description: input.description || null,
+          playerId: input.playerId || null,
+          thumbnailUrl: input.thumbnailUrl || null,
+          videoPublicId: input.videoPublicId || null,
+          durationSeconds: input.durationSeconds || null,
+          fileSizeBytes: input.fileSizeBytes || null,
+        });
+        res.status(201).json(highlight);
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          return res.status(400).json({ message: err.issues[0].message });
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.put(
+    "/api/match-highlights/:id",
+    requireActiveSession,
+    async (req, res) => {
+      try {
+        const highlightId = Number(req.params.id);
+        const existing = await storage.getMatchHighlight(highlightId);
+        if (!existing) {
+          return res.status(404).json({ message: "Jugada no encontrada" });
+        }
+        if (!(await canReviewHighlight(req, existing.tournamentId))) {
+          return res.status(403).json({
+            message: "No tienes permiso para modificar esta jugada",
+          });
+        }
+
+        const input = updateMatchHighlightSchema.parse(req.body);
+        const match = await storage.getMatch(existing.matchId);
+        if (!match) {
+          return res.status(404).json({ message: "Partido no encontrado" });
+        }
+        const merged = createMatchHighlightSchema.parse({
+          ...existing,
+          ...input,
+        });
+        if (!(await validateHighlightInput(merged, match, res))) return;
+
+        const updated = await storage.updateMatchHighlight(highlightId, {
+          ...input,
+          description: input.description === undefined ? undefined : input.description || null,
+          playerId: input.playerId === undefined ? undefined : input.playerId || null,
+          thumbnailUrl: input.thumbnailUrl === undefined ? undefined : input.thumbnailUrl || null,
+          videoPublicId: input.videoPublicId === undefined ? undefined : input.videoPublicId || null,
+          durationSeconds:
+            input.durationSeconds === undefined ? undefined : input.durationSeconds || null,
+          fileSizeBytes:
+            input.fileSizeBytes === undefined ? undefined : input.fileSizeBytes || null,
+        });
+        res.json(updated);
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          return res.status(400).json({ message: err.issues[0].message });
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.delete(
+    "/api/match-highlights/:id",
+    requireActiveSession,
+    async (req, res) => {
+      const highlightId = Number(req.params.id);
+      const existing = await storage.getMatchHighlight(highlightId);
+      if (!existing) {
+        return res.status(404).json({ message: "Jugada no encontrada" });
+      }
+      if (!(await canReviewHighlight(req, existing.tournamentId))) {
+        return res.status(403).json({
+          message: "No tienes permiso para eliminar esta jugada",
+        });
+      }
+      await storage.deleteMatchHighlight(highlightId);
+      res.json({ success: true });
+    },
+  );
 
   /* =======================
      GOALS

@@ -4,6 +4,7 @@ import {
   players,
   matches,
   goals,
+  matchHighlights,
   users,
   registrationRequests,
   tournaments,
@@ -12,18 +13,20 @@ import {
   type InsertPlayer,
   type InsertMatch,
   type InsertGoal,
+  type InsertMatchHighlight,
   type InsertUser,
   type Team,
   type Player,
   type Match,
   type Goal,
+  type MatchHighlight,
   type User,
   type RegistrationRequest,
   type Tournament,
   type InsertTournament,
   type TournamentTeam,
 } from "@shared/schema";
-import { eq, desc, isNull, and } from "drizzle-orm";
+import { eq, desc, isNull, and, or } from "drizzle-orm";
 import { calculateStandings, type Standing } from "./standings";
 
 /* =======================
@@ -54,6 +57,19 @@ export interface IStorage {
   // Goals
   getGoals(matchId: number): Promise<Goal[]>;
   createGoal(goal: InsertGoal): Promise<Goal>;
+
+  // Match highlights
+  getMatchHighlights(
+    matchId: number,
+    options?: { includeAll?: boolean; uploadedBy?: number },
+  ): Promise<MatchHighlight[]>;
+  getMatchHighlight(id: number): Promise<MatchHighlight | undefined>;
+  createMatchHighlight(highlight: InsertMatchHighlight): Promise<MatchHighlight>;
+  updateMatchHighlight(
+    id: number,
+    updates: Partial<InsertMatchHighlight>,
+  ): Promise<MatchHighlight | undefined>;
+  deleteMatchHighlight(id: number): Promise<void>;
 
   // Standings
   getStandings(tournamentId: number): Promise<Standing[]>;
@@ -192,6 +208,75 @@ export class DatabaseStorage implements IStorage {
   async createGoal(goal: InsertGoal): Promise<Goal> {
     const [newGoal] = await db.insert(goals).values(goal).returning();
     return newGoal;
+  }
+
+  /* =======================
+     MATCH HIGHLIGHTS
+  ======================= */
+
+  async getMatchHighlights(
+    matchId: number,
+    options: { includeAll?: boolean; uploadedBy?: number } = {},
+  ): Promise<MatchHighlight[]> {
+    const conditions = [eq(matchHighlights.matchId, matchId)];
+    if (!options.includeAll) {
+      conditions.push(eq(matchHighlights.status, "approved"));
+      if (options.uploadedBy) {
+        return db
+          .select()
+          .from(matchHighlights)
+          .where(
+            and(
+              eq(matchHighlights.matchId, matchId),
+              or(
+                eq(matchHighlights.status, "approved"),
+                eq(matchHighlights.uploadedBy, options.uploadedBy),
+              ),
+            ),
+          )
+          .orderBy(desc(matchHighlights.createdAt));
+      }
+    }
+
+    return db
+      .select()
+      .from(matchHighlights)
+      .where(and(...conditions))
+      .orderBy(desc(matchHighlights.createdAt));
+  }
+
+  async getMatchHighlight(id: number): Promise<MatchHighlight | undefined> {
+    const [highlight] = await db
+      .select()
+      .from(matchHighlights)
+      .where(eq(matchHighlights.id, id));
+    return highlight;
+  }
+
+  async createMatchHighlight(
+    highlight: InsertMatchHighlight,
+  ): Promise<MatchHighlight> {
+    const [created] = await db
+      .insert(matchHighlights)
+      .values(highlight)
+      .returning();
+    return created;
+  }
+
+  async updateMatchHighlight(
+    id: number,
+    updates: Partial<InsertMatchHighlight>,
+  ): Promise<MatchHighlight | undefined> {
+    const [updated] = await db
+      .update(matchHighlights)
+      .set(updates)
+      .where(eq(matchHighlights.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteMatchHighlight(id: number): Promise<void> {
+    await db.delete(matchHighlights).where(eq(matchHighlights.id, id));
   }
 
   /* =======================

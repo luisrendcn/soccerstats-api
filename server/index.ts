@@ -203,6 +203,30 @@ app.use((req, res, next) => {
       SET requested_role = 'team_captain'
       WHERE requested_role = 'team'
     `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS match_highlights (
+        id serial PRIMARY KEY,
+        match_id integer NOT NULL,
+        tournament_id integer NOT NULL,
+        team_id integer NOT NULL,
+        player_id integer,
+        title text NOT NULL,
+        description text,
+        highlight_type text NOT NULL,
+        minute integer NOT NULL,
+        video_url text NOT NULL,
+        video_public_id text,
+        thumbnail_url text,
+        uploaded_by integer NOT NULL,
+        created_at timestamp DEFAULT now(),
+        status text NOT NULL DEFAULT 'pending',
+        duration_seconds integer,
+        file_size_bytes integer
+      )
+    `);
+    await db.execute(sql`ALTER TABLE match_highlights ADD COLUMN IF NOT EXISTS video_public_id text`);
+    await db.execute(sql`ALTER TABLE match_highlights ADD COLUMN IF NOT EXISTS duration_seconds integer`);
+    await db.execute(sql`ALTER TABLE match_highlights ADD COLUMN IF NOT EXISTS file_size_bytes integer`);
     const count = await db.execute(sql`SELECT count(*) FROM teams`);
     console.log("Migration complete, teams count query result:", count);
   } catch (err) {
