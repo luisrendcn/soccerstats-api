@@ -550,7 +550,7 @@ export default function MatchDetails() {
                     <Label>Minuto</Label>
                     <Input 
                       type="number" 
-                      placeholder="Ej. 45" 
+                      placeholder="Ej. 45"
                       value={goalMinute}
                       onChange={e => setGoalMinute(e.target.value)}
                     />
