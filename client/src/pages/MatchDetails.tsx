@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
 import { useMatch, useUpdateMatch, useCreateGoal, useMatchGoals } from "@/hooks/use-matches";
 import {
@@ -74,7 +74,7 @@ function ScoreWheel({
   return (
     <div
       className={cn(
-        "w-20 select-none rounded-2xl border border-border bg-muted/20 p-2 text-center shadow-inner sm:w-24",
+        "w-14 select-none rounded-xl border border-border bg-muted/20 p-1.5 text-center shadow-inner sm:w-16",
         disabled ? "cursor-default opacity-90" : "cursor-ns-resize touch-none",
       )}
       onWheel={(event) => {
@@ -99,19 +99,19 @@ function ScoreWheel({
     >
       <button
         type="button"
-        className="w-full rounded-lg py-0.5 text-sm text-muted-foreground disabled:opacity-40"
+        className="w-full rounded-md py-0 text-xs text-muted-foreground disabled:opacity-40"
         onClick={() => move(-1)}
         disabled={disabled}
         aria-label={`Disminuir ${label}`}
       >
         {previous}
       </button>
-      <div className="my-1 rounded-xl bg-background py-2 text-5xl font-black text-primary shadow-sm sm:text-6xl">
+      <div className="my-0.5 rounded-lg bg-background py-1.5 text-3xl font-black text-primary shadow-sm sm:text-4xl">
         {normalizedValue}
       </div>
       <button
         type="button"
-        className="w-full rounded-lg py-0.5 text-sm text-muted-foreground disabled:opacity-40"
+        className="w-full rounded-md py-0 text-xs text-muted-foreground disabled:opacity-40"
         onClick={() => move(1)}
         disabled={disabled}
         aria-label={`Aumentar ${label}`}
@@ -211,9 +211,29 @@ export default function MatchDetails() {
   const [playingHighlightIds, setPlayingHighlightIds] = useState<
     Record<number, boolean>
   >({});
+  const [optimisticScore, setOptimisticScore] = useState<{
+    matchId: number;
+    homeScore: number;
+    awayScore: number;
+  } | null>(null);
+  const [pendingScoreSave, setPendingScoreSave] = useState<{
+    matchId: number;
+    homeScore: number;
+    awayScore: number;
+  } | null>(null);
 
   const isLoading = matchLoading || goalsLoading || !match || !homeTeam || !awayTeam;
   const isFinished = match?.status === "finished";
+  const currentOptimisticScore =
+    optimisticScore?.matchId === match?.id ? optimisticScore : null;
+  const displayedHomeScore =
+    currentOptimisticScore
+      ? currentOptimisticScore.homeScore
+      : match?.homeScore || 0;
+  const displayedAwayScore =
+    currentOptimisticScore
+      ? currentOptimisticScore.awayScore
+      : match?.awayScore || 0;
   const allPlayers = [...(homePlayers || []), ...(awayPlayers || [])];
   const selectedGoalTeamPlayers =
     selectedTeamId === String(homeTeam?.id)
@@ -225,30 +245,68 @@ export default function MatchDetails() {
     (player) => String(player.teamId) === highlightTeamId,
   );
 
+  useEffect(() => {
+    if (!match) return;
+    if (pendingScoreSave?.matchId === match.id) return;
+    setOptimisticScore({
+      matchId: match.id,
+      homeScore: match.homeScore || 0,
+      awayScore: match.awayScore || 0,
+    });
+  }, [match?.id, match?.homeScore, match?.awayScore, pendingScoreSave?.matchId]);
+
+  useEffect(() => {
+    if (!pendingScoreSave) return;
+    const saveTimer = window.setTimeout(async () => {
+      const scoreToSave = pendingScoreSave;
+      try {
+        await updateMatch.mutateAsync({
+          id: scoreToSave.matchId,
+          homeScore: scoreToSave.homeScore,
+          awayScore: scoreToSave.awayScore,
+        });
+        setPendingScoreSave((current) =>
+          current === scoreToSave ? null : current,
+        );
+      } catch (err) {
+        setPendingScoreSave((current) =>
+          current === scoreToSave ? null : current,
+        );
+        if (match?.id === scoreToSave.matchId) {
+          setOptimisticScore({
+            matchId: match.id,
+            homeScore: match.homeScore || 0,
+            awayScore: match.awayScore || 0,
+          });
+        }
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "No se pudo actualizar el marcador",
+        });
+      }
+    }, 350);
+
+    return () => window.clearTimeout(saveTimer);
+  }, [pendingScoreSave, match?.id, match?.homeScore, match?.awayScore]);
+
   const handleGoalTeamChange = (teamId: string) => {
     setSelectedTeamId(teamId);
     setSelectedPlayerId("unknown");
   };
 
-  const handleScoreWheelChange = async (
+  const handleScoreWheelChange = (
     teamSide: "home" | "away",
     score: number,
   ) => {
-    if (!match || !canModifyMatch || isFinished || updateMatch.isPending) return;
-    try {
-      await updateMatch.mutateAsync({
-        id: match.id,
-        ...(teamSide === "home"
-          ? { homeScore: score }
-          : { awayScore: score }),
-      });
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No se pudo actualizar el marcador",
-      });
-    }
+    if (!match || !canModifyMatch || isFinished) return;
+    const nextScore = {
+      matchId: match.id,
+      homeScore: teamSide === "home" ? score : displayedHomeScore,
+      awayScore: teamSide === "away" ? score : displayedAwayScore,
+    };
+    setOptimisticScore(nextScore);
+    setPendingScoreSave(nextScore);
   };
 
   const handleFinishMatch = async () => {
@@ -445,35 +503,35 @@ export default function MatchDetails() {
           {isFinished ? <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="w-3 h-3"/> Final Score</span> : <span className="flex items-center gap-1 text-primary"><Clock className="w-3 h-3"/> Live Match</span>}
         </div>
         
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex-1 flex flex-col items-center gap-2">
+        <div className="p-4 sm:p-6">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4 mb-6">
+            <div className="min-w-0 flex flex-col items-center gap-2">
               <TeamColorCircleLarge color={homeTeam.color}>
                 {homeTeam.name.substring(0, 1)}
               </TeamColorCircleLarge>
-              <h3 className="font-display font-bold text-center leading-tight">{homeTeam.name}</h3>
+              <h3 className="font-display text-xs font-bold text-center leading-tight sm:text-base">{homeTeam.name}</h3>
             </div>
 
-            <div className="px-6 flex flex-col items-center">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <ScoreWheel
                   label={`Goles de ${homeTeam.name}`}
-                  value={match.homeScore || 0}
+                  value={displayedHomeScore}
                   onChange={(score) => handleScoreWheelChange("home", score)}
-                  disabled={!canModifyMatch || isFinished || updateMatch.isPending}
+                  disabled={!canModifyMatch || isFinished}
                 />
-                <span className="text-4xl font-mono font-bold text-muted-foreground">
+                <span className="text-2xl font-mono font-bold text-muted-foreground sm:text-3xl">
                   -
                 </span>
                 <ScoreWheel
                   label={`Goles de ${awayTeam.name}`}
-                  value={match.awayScore || 0}
+                  value={displayedAwayScore}
                   onChange={(score) => handleScoreWheelChange("away", score)}
-                  disabled={!canModifyMatch || isFinished || updateMatch.isPending}
+                  disabled={!canModifyMatch || isFinished}
                 />
               </div>
               {canModifyMatch && !isFinished && (
-                <p className="mt-2 max-w-48 text-center text-[11px] text-muted-foreground">
+                <p className="mt-2 max-w-36 text-center text-[10px] leading-tight text-muted-foreground sm:max-w-48 sm:text-[11px]">
                   Desliza cada número para ajustar el marcador.
                 </p>
               )}
@@ -482,11 +540,11 @@ export default function MatchDetails() {
               </div>
             </div>
 
-            <div className="flex-1 flex flex-col items-center gap-2">
+            <div className="min-w-0 flex flex-col items-center gap-2">
               <TeamColorCircleLarge color={awayTeam.color}>
                 {awayTeam.name.substring(0, 1)}
               </TeamColorCircleLarge>
-              <h3 className="font-display font-bold text-center leading-tight">{awayTeam.name}</h3>
+              <h3 className="font-display text-xs font-bold text-center leading-tight sm:text-base">{awayTeam.name}</h3>
             </div>
           </div>
           
