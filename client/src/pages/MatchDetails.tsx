@@ -49,11 +49,20 @@ function getYouTubeVideoId(videoUrl: string) {
     const url = new URL(videoUrl);
     const host = url.hostname.replace(/^www\./, "");
     if (host === "youtu.be") return url.pathname.slice(1).split("/")[0];
-    if (host === "youtube.com" || host === "m.youtube.com") {
+    if (
+      host === "youtube.com" ||
+      host === "m.youtube.com" ||
+      host === "youtube-nocookie.com"
+    ) {
       const watchId = url.searchParams.get("v");
       if (watchId) return watchId;
       const parts = url.pathname.split("/").filter(Boolean);
-      if ((parts[0] === "shorts" || parts[0] === "embed") && parts[1]) {
+      if (
+        (parts[0] === "shorts" ||
+          parts[0] === "embed" ||
+          parts[0] === "live") &&
+        parts[1]
+      ) {
         return parts[1];
       }
     }
@@ -248,9 +257,20 @@ export default function MatchDetails() {
         videoUrl: highlightVideoUrl.trim(),
         videoPublicId: null,
       };
-      const thumbnailPayload = highlightThumbnailFile
-        ? await uploadHighlightThumbnail(highlightThumbnailFile)
-        : {};
+      let thumbnailPayload = {};
+      if (highlightThumbnailFile) {
+        try {
+          thumbnailPayload = await uploadHighlightThumbnail(highlightThumbnailFile);
+        } catch (thumbnailError) {
+          toast({
+            variant: "destructive",
+            title: "Miniatura no subida",
+            description:
+              "La jugada se guardará sin miniatura. Revisa las variables de Cloudinary en Render.",
+          });
+          console.warn("Highlight thumbnail upload failed", thumbnailError);
+        }
+      }
 
       if (editingHighlight) {
         await updateHighlight.mutateAsync({

@@ -265,11 +265,16 @@ const youtubeVideoUrlSchema = z
       const url = new URL(value);
       const host = url.hostname.replace(/^www\./, "");
       if (host === "youtu.be") return url.pathname.length > 1;
-      if (host === "youtube.com" || host === "m.youtube.com") {
+      if (
+        host === "youtube.com" ||
+        host === "m.youtube.com" ||
+        host === "youtube-nocookie.com"
+      ) {
         return (
           url.searchParams.has("v") ||
           url.pathname.startsWith("/shorts/") ||
-          url.pathname.startsWith("/embed/")
+          url.pathname.startsWith("/embed/") ||
+          url.pathname.startsWith("/live/")
         );
       }
       return false;

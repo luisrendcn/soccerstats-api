@@ -479,6 +479,28 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(createHighlight).not.toHaveBeenCalled();
   });
 
+  it('accepts YouTube live URLs for match highlights', async () => {
+    const captainApp = buildApp('team_captain', 5);
+    vi.spyOn(storage, 'getMatch').mockResolvedValueOnce({
+      id: 11,
+      tournamentId: 42,
+      homeTeamId: 5,
+      awayTeamId: 6,
+    } as any);
+
+    const res = await request(captainApp)
+      .post('/api/matches/11/highlights')
+      .send({
+        teamId: 5,
+        title: 'Transmisión destacada',
+        highlightType: 'goal',
+        minute: 12,
+        videoUrl: 'https://www.youtube.com/live/live123?si=abc',
+      });
+
+    expect(res.status).toBe(201);
+  });
+
   it('lets an admin approve a pending match highlight', async () => {
     vi.spyOn(storage, 'getMatchHighlight').mockResolvedValueOnce({
       id: 1,
