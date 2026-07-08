@@ -44,37 +44,47 @@ const statusLabels: Record<string, { label: string; className: string }> = {
   rejected: { label: "Rechazado", className: "bg-red-100 text-red-800" },
 };
 
-function wrapGoalNumber(value: number) {
-  if (value > 9) return 1;
-  if (value < 1) return 9;
+function wrapScoreNumber(value: number) {
+  if (value > 9) return 0;
+  if (value < 0) return 9;
   return value;
 }
 
-function GoalNumberWheel({
+function ScoreWheel({
+  label,
   value,
   onChange,
+  disabled,
 }: {
+  label: string;
   value: number;
   onChange: (value: number) => void;
+  disabled?: boolean;
 }) {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
-  const previous = wrapGoalNumber(value - 1);
-  const next = wrapGoalNumber(value + 1);
+  const normalizedValue = wrapScoreNumber(value || 0);
+  const previous = wrapScoreNumber(normalizedValue - 1);
+  const next = wrapScoreNumber(normalizedValue + 1);
 
   const move = (direction: 1 | -1) => {
-    onChange(wrapGoalNumber(value + direction));
+    if (disabled) return;
+    onChange(wrapScoreNumber(normalizedValue + direction));
   };
 
   return (
     <div
-      className="mx-auto w-36 select-none rounded-2xl border border-border bg-muted/20 p-3 text-center shadow-inner"
+      className={cn(
+        "w-20 select-none rounded-2xl border border-border bg-muted/20 p-2 text-center shadow-inner sm:w-24",
+        disabled ? "cursor-default opacity-90" : "cursor-ns-resize touch-none",
+      )}
       onWheel={(event) => {
+        if (disabled) return;
         event.preventDefault();
-        move(event.deltaY > 0 ? 1 : -1);
+        move(event.deltaY < 0 ? 1 : -1);
       }}
       onTouchStart={(event) => setTouchStartY(event.touches[0].clientY)}
       onTouchEnd={(event) => {
-        if (touchStartY === null) return;
+        if (disabled || touchStartY === null) return;
         const deltaY = touchStartY - event.changedTouches[0].clientY;
         if (Math.abs(deltaY) > 20) {
           move(deltaY > 0 ? 1 : -1);
@@ -82,27 +92,29 @@ function GoalNumberWheel({
         setTouchStartY(null);
       }}
       role="spinbutton"
-      aria-valuemin={1}
+      aria-valuemin={0}
       aria-valuemax={9}
-      aria-valuenow={value}
-      aria-label="Número del jugador"
+      aria-valuenow={normalizedValue}
+      aria-label={label}
     >
       <button
         type="button"
-        className="w-full rounded-lg py-1 text-muted-foreground"
+        className="w-full rounded-lg py-0.5 text-sm text-muted-foreground disabled:opacity-40"
         onClick={() => move(-1)}
-        aria-label="Número anterior"
+        disabled={disabled}
+        aria-label={`Disminuir ${label}`}
       >
         {previous}
       </button>
-      <div className="my-1 rounded-xl bg-background py-3 text-5xl font-black text-primary shadow-sm">
-        {value}
+      <div className="my-1 rounded-xl bg-background py-2 text-5xl font-black text-primary shadow-sm sm:text-6xl">
+        {normalizedValue}
       </div>
       <button
         type="button"
-        className="w-full rounded-lg py-1 text-muted-foreground"
+        className="w-full rounded-lg py-0.5 text-sm text-muted-foreground disabled:opacity-40"
         onClick={() => move(1)}
-        aria-label="Número siguiente"
+        disabled={disabled}
+        aria-label={`Aumentar ${label}`}
       >
         {next}
       </button>
@@ -181,7 +193,6 @@ export default function MatchDetails() {
       ((auth.userRole === "team_captain" || auth.userRole === "team") &&
         [match?.homeTeamId, match?.awayTeamId].includes(auth.teamId || 0)));
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("unknown");
-  const [selectedScorerNumber, setSelectedScorerNumber] = useState(1);
   const [goalMinute, setGoalMinute] = useState("");
   const [isGoalDialogOpen, setIsGoalDialogOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState("");
@@ -210,38 +221,34 @@ export default function MatchDetails() {
       : selectedTeamId === String(awayTeam?.id)
         ? awayPlayers || []
         : [];
-  const selectedScorer = selectedGoalTeamPlayers.find(
-    (player) => Number(player.number) === selectedScorerNumber,
-  );
   const highlightTeamPlayers = allPlayers.filter(
     (player) => String(player.teamId) === highlightTeamId,
   );
 
   const handleGoalTeamChange = (teamId: string) => {
     setSelectedTeamId(teamId);
-    if (!homeTeam || !awayTeam) {
-      setSelectedPlayerId("unknown");
-      return;
-    }
-    const players =
-      teamId === String(homeTeam.id)
-        ? homePlayers || []
-        : teamId === String(awayTeam.id)
-          ? awayPlayers || []
-          : [];
-    const player = players.find(
-      (candidate) => Number(candidate.number) === selectedScorerNumber,
-    );
-    setSelectedPlayerId(player ? String(player.id) : "unknown");
+    setSelectedPlayerId("unknown");
   };
 
-  const handleScorerNumberChange = (number: number) => {
-    const wrappedNumber = wrapGoalNumber(number);
-    setSelectedScorerNumber(wrappedNumber);
-    const player = selectedGoalTeamPlayers.find(
-      (candidate) => Number(candidate.number) === wrappedNumber,
-    );
-    setSelectedPlayerId(player ? String(player.id) : "unknown");
+  const handleScoreWheelChange = async (
+    teamSide: "home" | "away",
+    score: number,
+  ) => {
+    if (!match || !canModifyMatch || isFinished || updateMatch.isPending) return;
+    try {
+      await updateMatch.mutateAsync({
+        id: match.id,
+        ...(teamSide === "home"
+          ? { homeScore: score }
+          : { awayScore: score }),
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo actualizar el marcador",
+      });
+    }
   };
 
   const handleFinishMatch = async () => {
@@ -259,7 +266,6 @@ export default function MatchDetails() {
     if (!selectedTeamId || !goalMinute) return;
 
     try {
-      // 1. Create the goal record
       await createGoal.mutateAsync({
         matchId,
         teamId: parseInt(selectedTeamId),
@@ -267,19 +273,10 @@ export default function MatchDetails() {
         minute: parseInt(goalMinute)
       });
 
-      // 2. Update the match score
-      const isHome = parseInt(selectedTeamId) === match?.homeTeamId;
-      await updateMatch.mutateAsync({
-        id: matchId,
-        homeScore: isHome ? (match?.homeScore || 0) + 1 : match?.homeScore,
-        awayScore: !isHome ? (match?.awayScore || 0) + 1 : match?.awayScore,
-      });
-
-      toast({ title: "GOAL!", description: "Score updated." });
+      toast({ title: "Detalle guardado", description: "El gol quedó registrado en los eventos." });
       setIsGoalDialogOpen(false);
       setGoalMinute("");
       setSelectedPlayerId("unknown");
-      setSelectedScorerNumber(1);
     } catch (err) {
       toast({ variant: "destructive", title: "Error", description: (err as Error).message });
     }
@@ -458,9 +455,28 @@ export default function MatchDetails() {
             </div>
 
             <div className="px-6 flex flex-col items-center">
-              <div className="text-4xl font-mono font-bold tracking-tight bg-muted/20 px-4 py-2 rounded-lg">
-                {match.homeScore} - {match.awayScore}
+              <div className="flex items-center gap-3">
+                <ScoreWheel
+                  label={`Goles de ${homeTeam.name}`}
+                  value={match.homeScore || 0}
+                  onChange={(score) => handleScoreWheelChange("home", score)}
+                  disabled={!canModifyMatch || isFinished || updateMatch.isPending}
+                />
+                <span className="text-4xl font-mono font-bold text-muted-foreground">
+                  -
+                </span>
+                <ScoreWheel
+                  label={`Goles de ${awayTeam.name}`}
+                  value={match.awayScore || 0}
+                  onChange={(score) => handleScoreWheelChange("away", score)}
+                  disabled={!canModifyMatch || isFinished || updateMatch.isPending}
+                />
               </div>
+              {canModifyMatch && !isFinished && (
+                <p className="mt-2 max-w-48 text-center text-[11px] text-muted-foreground">
+                  Desliza cada número para ajustar el marcador.
+                </p>
+              )}
               <div className="mt-2 text-xs text-muted-foreground font-medium uppercase tracking-wider">
                 {format(new Date(match.date), "HH:mm")}
               </div>
@@ -487,20 +503,20 @@ export default function MatchDetails() {
               <>
               <Dialog open={isGoalDialogOpen} onOpenChange={setIsGoalDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="w-full font-bold shadow-sm" variant="default">
-                  <Trophy className="w-4 h-4 mr-2" /> Add Goal
+                <Button className="w-full shadow-sm" variant="outline">
+                  <Trophy className="w-4 h-4 mr-2" /> Detalle de gol
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Record Goal</DialogTitle>
+                  <DialogTitle>Agregar detalle de gol</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAddGoal} className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label>Scoring Team</Label>
+                    <Label>Equipo que anotó</Label>
                     <Select value={selectedTeamId} onValueChange={handleGoalTeamChange}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select Team" />
+                        <SelectValue placeholder="Selecciona equipo" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={String(homeTeam.id)}>{homeTeam.name}</SelectItem>
@@ -510,32 +526,38 @@ export default function MatchDetails() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Número del jugador</Label>
-                    <GoalNumberWheel
-                      value={selectedScorerNumber}
-                      onChange={handleScorerNumberChange}
-                    />
-                    <p className="text-center text-sm text-muted-foreground">
-                      {selectedTeamId
-                        ? selectedScorer
-                          ? `${selectedScorer.name} #${selectedScorer.number}`
-                          : `No hay jugador con el #${selectedScorerNumber}; se guardará como desconocido.`
-                        : "Primero selecciona el equipo que anotó."}
-                    </p>
+                    <Label>Jugador, si aplica</Label>
+                    <Select
+                      value={selectedPlayerId}
+                      onValueChange={setSelectedPlayerId}
+                      disabled={!selectedTeamId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona jugador" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unknown">Sin jugador / desconocido</SelectItem>
+                        {selectedGoalTeamPlayers.map((player) => (
+                          <SelectItem key={player.id} value={String(player.id)}>
+                            {player.name} #{player.number}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Minute</Label>
+                    <Label>Minuto</Label>
                     <Input 
                       type="number" 
-                      placeholder="e.g. 45" 
+                      placeholder="Ej. 45" 
                       value={goalMinute}
                       onChange={e => setGoalMinute(e.target.value)}
                     />
                   </div>
 
                   <Button type="submit" className="w-full" disabled={createGoal.isPending}>
-                    Confirm Goal
+                    Guardar detalle
                   </Button>
                 </form>
               </DialogContent>
