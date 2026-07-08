@@ -4,7 +4,7 @@ import { useMatch, useUpdateMatch, useCreateGoal, useMatchGoals } from "@/hooks/
 import {
   useCreateMatchHighlight,
   useDeleteMatchHighlight,
-  useHighlightUploadSignature,
+  useHighlightThumbnailSignature,
   useMatchHighlights,
   useUpdateMatchHighlight,
 } from "@/hooks/use-highlights";
@@ -44,11 +44,28 @@ const statusLabels: Record<string, { label: string; className: string }> = {
   rejected: { label: "Rechazado", className: "bg-red-100 text-red-800" },
 };
 
-function buildCloudinaryThumbnail(videoUrl: string) {
-  if (!videoUrl.includes("/video/upload/")) return undefined;
-  return videoUrl
-    .replace("/video/upload/", "/video/upload/so_0/")
-    .replace(/\.[^/.]+$/, ".jpg");
+function getYouTubeVideoId(videoUrl: string) {
+  try {
+    const url = new URL(videoUrl);
+    const host = url.hostname.replace(/^www\./, "");
+    if (host === "youtu.be") return url.pathname.slice(1).split("/")[0];
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      const watchId = url.searchParams.get("v");
+      if (watchId) return watchId;
+      const parts = url.pathname.split("/").filter(Boolean);
+      if ((parts[0] === "shorts" || parts[0] === "embed") && parts[1]) {
+        return parts[1];
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function getYouTubeEmbedUrl(videoUrl: string) {
+  const id = getYouTubeVideoId(videoUrl);
+  return id ? `https://www.youtube.com/embed/${id}` : null;
 }
 
 export default function MatchDetails() {
@@ -71,7 +88,7 @@ export default function MatchDetails() {
 
   const updateMatch = useUpdateMatch();
   const createGoal = useCreateGoal();
-  const uploadSignature = useHighlightUploadSignature(matchId);
+  const thumbnailSignature = useHighlightThumbnailSignature(matchId);
   const createHighlight = useCreateMatchHighlight(matchId);
   const updateHighlight = useUpdateMatchHighlight(matchId);
   const deleteHighlight = useDeleteMatchHighlight(matchId);
@@ -95,13 +112,18 @@ export default function MatchDetails() {
   const [isHighlightDialogOpen, setIsHighlightDialogOpen] = useState(false);
   const [editingHighlight, setEditingHighlight] =
     useState<MatchHighlight | null>(null);
-  const [highlightFile, setHighlightFile] = useState<File | null>(null);
+  const [highlightThumbnailFile, setHighlightThumbnailFile] =
+    useState<File | null>(null);
+  const [highlightVideoUrl, setHighlightVideoUrl] = useState("");
   const [highlightTitle, setHighlightTitle] = useState("");
   const [highlightDescription, setHighlightDescription] = useState("");
   const [highlightType, setHighlightType] = useState("goal");
   const [highlightTeamId, setHighlightTeamId] = useState("");
   const [highlightPlayerId, setHighlightPlayerId] = useState("none");
   const [highlightMinute, setHighlightMinute] = useState("");
+  const [playingHighlightIds, setPlayingHighlightIds] = useState<
+    Record<number, boolean>
+  >({});
 
   const isLoading = matchLoading || goalsLoading || !match || !homeTeam || !awayTeam;
   const isFinished = match?.status === "finished";
@@ -152,7 +174,8 @@ export default function MatchDetails() {
 
   const resetHighlightForm = () => {
     setEditingHighlight(null);
-    setHighlightFile(null);
+    setHighlightThumbnailFile(null);
+    setHighlightVideoUrl("");
     setHighlightTitle("");
     setHighlightDescription("");
     setHighlightType("goal");
@@ -163,7 +186,8 @@ export default function MatchDetails() {
 
   const openEditHighlight = (highlight: MatchHighlight) => {
     setEditingHighlight(highlight);
-    setHighlightFile(null);
+    setHighlightThumbnailFile(null);
+    setHighlightVideoUrl(highlight.videoUrl);
     setHighlightTitle(highlight.title);
     setHighlightDescription(highlight.description || "");
     setHighlightType(highlight.highlightType);
@@ -173,13 +197,13 @@ export default function MatchDetails() {
     setIsHighlightDialogOpen(true);
   };
 
-  const uploadHighlightVideo = async (file: File) => {
-    const signature = await uploadSignature.mutateAsync();
+  const uploadHighlightThumbnail = async (file: File) => {
+    const signature = await thumbnailSignature.mutateAsync();
     if (file.size > signature.maxFileSizeBytes) {
-      throw new Error("El video supera el tamaño máximo permitido");
+      throw new Error("La miniatura supera el tamaño máximo permitido");
     }
-    if (file.type !== "video/mp4" && !file.name.toLowerCase().endsWith(".mp4")) {
-      throw new Error("Sólo se permiten videos MP4");
+    if (!file.type.startsWith("image/")) {
+      throw new Error("La miniatura debe ser una imagen");
     }
 
     const formData = new FormData();
@@ -190,35 +214,29 @@ export default function MatchDetails() {
     formData.append("signature", signature.signature);
 
     const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${signature.cloudName}/video/upload`,
+      `https://api.cloudinary.com/v1_1/${signature.cloudName}/image/upload`,
       { method: "POST", body: formData },
     );
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.error?.message || "No se pudo subir el video");
-    }
-    if (payload.duration && payload.duration > signature.maxDurationSeconds) {
-      throw new Error(
-        `El video no debe superar ${signature.maxDurationSeconds} segundos`,
-      );
+      throw new Error(payload.error?.message || "No se pudo subir la miniatura");
     }
 
     return {
-      videoUrl: payload.secure_url as string,
-      videoPublicId: payload.public_id as string,
-      thumbnailUrl: buildCloudinaryThumbnail(payload.secure_url),
-      durationSeconds: payload.duration
-        ? Math.round(Number(payload.duration))
-        : undefined,
+      thumbnailUrl: payload.secure_url as string,
       fileSizeBytes: payload.bytes ? Number(payload.bytes) : file.size,
     };
   };
 
   const handleSaveHighlight = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!highlightTitle.trim() || !highlightTeamId || !highlightMinute) return;
+    if (!highlightTitle.trim() || !highlightTeamId || !highlightMinute || !highlightVideoUrl.trim()) return;
 
     try {
+      if (!getYouTubeEmbedUrl(highlightVideoUrl.trim())) {
+        throw new Error("Pega un enlace válido de YouTube");
+      }
+
       const basePayload = {
         teamId: Number(highlightTeamId),
         playerId:
@@ -227,22 +245,25 @@ export default function MatchDetails() {
         description: highlightDescription.trim() || null,
         highlightType: highlightType as any,
         minute: Number(highlightMinute),
+        videoUrl: highlightVideoUrl.trim(),
+        videoPublicId: null,
       };
+      const thumbnailPayload = highlightThumbnailFile
+        ? await uploadHighlightThumbnail(highlightThumbnailFile)
+        : {};
 
       if (editingHighlight) {
         await updateHighlight.mutateAsync({
           id: editingHighlight.id,
           ...basePayload,
+          ...thumbnailPayload,
         });
         toast({ title: "Jugada actualizada" });
       } else {
-        if (!highlightFile) {
-          throw new Error("El video es obligatorio");
-        }
-        const upload = await uploadHighlightVideo(highlightFile);
         await createHighlight.mutateAsync({
           ...basePayload,
-          ...upload,
+          thumbnailUrl: null,
+          ...thumbnailPayload,
         });
         toast({
           title: "Jugada enviada",
@@ -485,21 +506,33 @@ export default function MatchDetails() {
                   </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSaveHighlight} className="space-y-4 mt-4">
-                  {!editingHighlight && (
-                    <div className="space-y-2">
-                      <Label>Video MP4</Label>
-                      <Input
-                        type="file"
-                        accept="video/mp4,.mp4"
-                        onChange={(e) =>
-                          setHighlightFile(e.target.files?.[0] || null)
-                        }
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Formato MP4. Duración máxima recomendada: 30 a 60 segundos.
-                      </p>
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <Label>Enlace de YouTube</Label>
+                    <Input
+                      type="url"
+                      value={highlightVideoUrl}
+                      onChange={(e) => setHighlightVideoUrl(e.target.value)}
+                      placeholder="https://youtu.be/... o https://www.youtube.com/watch?v=..."
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Sube el video a YouTube como No listado o Público y pega aquí el enlace.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Miniatura opcional</Label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) =>
+                        setHighlightThumbnailFile(e.target.files?.[0] || null)
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Si agregas imagen, se subirá a Cloudinary. Si no, YouTube mostrará su propia vista previa.
+                    </p>
+                  </div>
 
                   <div className="space-y-2">
                     <Label>Título</Label>
@@ -601,12 +634,12 @@ export default function MatchDetails() {
                     type="submit"
                     className="w-full"
                     disabled={
-                      uploadSignature.isPending ||
+                      thumbnailSignature.isPending ||
                       createHighlight.isPending ||
                       updateHighlight.isPending
                     }
                   >
-                    {(uploadSignature.isPending ||
+                    {(thumbnailSignature.isPending ||
                       createHighlight.isPending ||
                       updateHighlight.isPending) && (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -634,16 +667,49 @@ export default function MatchDetails() {
                     : undefined;
               const player = allPlayers.find((p) => p.id === highlight.playerId);
               const status = statusLabels[highlight.status] || statusLabels.pending;
+              const embedUrl = getYouTubeEmbedUrl(highlight.videoUrl);
+              const shouldShowPlayer =
+                !!embedUrl &&
+                (!highlight.thumbnailUrl || playingHighlightIds[highlight.id]);
 
               return (
                 <Card key={highlight.id} className="overflow-hidden">
-                  <video
-                    className="aspect-video w-full bg-black object-cover"
-                    controls
-                    preload="metadata"
-                    poster={highlight.thumbnailUrl || undefined}
-                    src={highlight.videoUrl}
-                  />
+                  {shouldShowPlayer ? (
+                    <iframe
+                      className="aspect-video w-full bg-black"
+                      src={embedUrl}
+                      title={highlight.title}
+                      loading="lazy"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  ) : embedUrl && highlight.thumbnailUrl ? (
+                    <div className="relative aspect-video w-full bg-black">
+                      <img
+                        src={highlight.thumbnailUrl}
+                        alt={highlight.title}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/35">
+                        <Button
+                          type="button"
+                          onClick={() =>
+                            setPlayingHighlightIds((current) => ({
+                              ...current,
+                              [highlight.id]: true,
+                            }))
+                          }
+                        >
+                          Reproducir
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="aspect-video w-full bg-muted flex items-center justify-center text-sm text-muted-foreground">
+                      Video de YouTube no disponible
+                    </div>
+                  )}
                   <div className="space-y-3 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>

@@ -257,6 +257,27 @@ export const highlightTypeSchema = z.enum([
 
 export const highlightStatusSchema = z.enum(["pending", "approved", "rejected"]);
 
+const youtubeVideoUrlSchema = z
+  .string()
+  .url("La URL del video no es válida")
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      const host = url.hostname.replace(/^www\./, "");
+      if (host === "youtu.be") return url.pathname.length > 1;
+      if (host === "youtube.com" || host === "m.youtube.com") {
+        return (
+          url.searchParams.has("v") ||
+          url.pathname.startsWith("/shorts/") ||
+          url.pathname.startsWith("/embed/")
+        );
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, "Pega un enlace válido de YouTube");
+
 export const createMatchHighlightSchema = z.object({
   teamId: z.number().int().positive("El equipo es requerido"),
   playerId: z.number().int().positive().nullable().optional(),
@@ -264,7 +285,7 @@ export const createMatchHighlightSchema = z.object({
   description: z.string().trim().max(500).optional().nullable(),
   highlightType: highlightTypeSchema,
   minute: z.number().int().min(0).max(130),
-  videoUrl: z.string().url("La URL del video no es válida"),
+  videoUrl: youtubeVideoUrlSchema,
   videoPublicId: z.string().trim().min(1).optional().nullable(),
   thumbnailUrl: z.string().url().optional().nullable(),
   durationSeconds: z.number().int().positive().optional().nullable(),

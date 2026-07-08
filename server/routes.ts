@@ -42,11 +42,8 @@ const isTeamCaptainRole = (role: string) =>
   role === "team_captain" || role === "team";
 
 const MAX_HIGHLIGHT_MINUTE = Number(process.env.MATCH_MAX_MINUTE || 130);
-const MAX_HIGHLIGHT_DURATION_SECONDS = Number(
-  process.env.HIGHLIGHT_MAX_DURATION_SECONDS || 60,
-);
-const MAX_HIGHLIGHT_FILE_SIZE_BYTES =
-  Number(process.env.HIGHLIGHT_MAX_FILE_SIZE_MB || 50) * 1024 * 1024;
+const MAX_HIGHLIGHT_THUMBNAIL_FILE_SIZE_BYTES =
+  Number(process.env.HIGHLIGHT_THUMBNAIL_MAX_FILE_SIZE_MB || 5) * 1024 * 1024;
 
 async function establishSession(
   req: Request,
@@ -1008,22 +1005,22 @@ export async function registerRoutes(
       return false;
     }
     if (
-      input.durationSeconds &&
-      input.durationSeconds > MAX_HIGHLIGHT_DURATION_SECONDS
+      input.fileSizeBytes &&
+      input.fileSizeBytes > MAX_HIGHLIGHT_THUMBNAIL_FILE_SIZE_BYTES
     ) {
       res.status(400).json({
-        message: `El video no debe superar ${MAX_HIGHLIGHT_DURATION_SECONDS} segundos`,
+        message: `La miniatura supera el tamaño máximo permitido`,
       });
       return false;
     }
-    if (
-      input.fileSizeBytes &&
-      input.fileSizeBytes > MAX_HIGHLIGHT_FILE_SIZE_BYTES
-    ) {
-      res.status(400).json({
-        message: `El video supera el tamaño máximo permitido`,
-      });
-      return false;
+    if (input.thumbnailUrl) {
+      const thumbnailUrl = new URL(input.thumbnailUrl);
+      if (thumbnailUrl.hostname !== "res.cloudinary.com") {
+        res.status(400).json({
+          message: "La miniatura debe estar alojada en Cloudinary",
+        });
+        return false;
+      }
     }
     return true;
   };
@@ -1051,7 +1048,7 @@ export async function registerRoutes(
   });
 
   app.post(
-    "/api/matches/:matchId/highlights/upload-signature",
+    "/api/matches/:matchId/highlights/thumbnail-signature",
     requireActiveSession,
     async (req, res) => {
       const matchId = Number(req.params.matchId);
@@ -1071,12 +1068,12 @@ export async function registerRoutes(
       if (!cloudName || !apiKey || !apiSecret) {
         return res.status(503).json({
           message:
-            "El almacenamiento de videos no está configurado. Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.",
+            "El almacenamiento de miniaturas no está configurado. Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.",
         });
       }
 
       const timestamp = Math.floor(Date.now() / 1000);
-      const folder = `soccer-stats/match-highlights/${matchId}`;
+      const folder = `soccer-stats/match-highlight-thumbnails/${matchId}`;
       const signature = crypto
         .createHash("sha1")
         .update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`)
@@ -1088,9 +1085,8 @@ export async function registerRoutes(
         timestamp,
         folder,
         signature,
-        resourceType: "video",
-        maxFileSizeBytes: MAX_HIGHLIGHT_FILE_SIZE_BYTES,
-        maxDurationSeconds: MAX_HIGHLIGHT_DURATION_SECONDS,
+        resourceType: "image",
+        maxFileSizeBytes: MAX_HIGHLIGHT_THUMBNAIL_FILE_SIZE_BYTES,
       });
     },
   );

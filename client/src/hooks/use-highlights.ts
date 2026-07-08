@@ -6,15 +6,14 @@ import type {
 } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
 
-export interface HighlightUploadSignature {
+export interface HighlightThumbnailSignature {
   cloudName: string;
   apiKey: string;
   timestamp: number;
   folder: string;
   signature: string;
-  resourceType: "video";
+  resourceType: "image";
   maxFileSizeBytes: number;
-  maxDurationSeconds: number;
 }
 
 export function useMatchHighlights(matchId: number) {
@@ -31,11 +30,11 @@ export function useMatchHighlights(matchId: number) {
   });
 }
 
-export function useHighlightUploadSignature(matchId: number) {
+export function useHighlightThumbnailSignature(matchId: number) {
   return useMutation({
     mutationFn: async () => {
       const res = await apiFetch(
-        `/api/matches/${matchId}/highlights/upload-signature`,
+        `/api/matches/${matchId}/highlights/thumbnail-signature`,
         {
           method: "POST",
           credentials: "include",
@@ -43,9 +42,9 @@ export function useHighlightUploadSignature(matchId: number) {
       );
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message || "Failed to prepare video upload");
+        throw new Error(error.message || "Failed to prepare image upload");
       }
-      return res.json() as Promise<HighlightUploadSignature>;
+      return res.json() as Promise<HighlightThumbnailSignature>;
     },
   });
 }

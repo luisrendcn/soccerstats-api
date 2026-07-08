@@ -33,7 +33,7 @@ vi.mock('../storage', () => {
         description: 'Gran jugada',
         highlightType: 'goal',
         minute: 12,
-        videoUrl: 'https://cdn.example.com/highlight.mp4',
+        videoUrl: 'https://youtu.be/highlight123',
         videoPublicId: 'soccer-stats/match-highlights/9/highlight',
         thumbnailUrl: null,
         uploadedBy: 1,
@@ -53,7 +53,7 @@ vi.mock('../storage', () => {
       description: 'Gran jugada',
       highlightType: 'goal',
       minute: 12,
-      videoUrl: 'https://cdn.example.com/highlight.mp4',
+      videoUrl: 'https://youtu.be/highlight123',
       videoPublicId: 'soccer-stats/match-highlights/9/highlight',
       thumbnailUrl: null,
       uploadedBy: 1,
@@ -411,7 +411,7 @@ describe('Integration: basic endpoints (mocked storage)', () => {
         title: 'Golazo',
         highlightType: 'goal',
         minute: 12,
-        videoUrl: 'https://cdn.example.com/highlight.mp4',
+        videoUrl: 'https://youtu.be/highlight123',
       });
 
     expect(res.status).toBe(401);
@@ -435,7 +435,7 @@ describe('Integration: basic endpoints (mocked storage)', () => {
         description: 'Salvó el empate al final',
         highlightType: 'save',
         minute: 88,
-        videoUrl: 'https://cdn.example.com/save.mp4',
+        videoUrl: 'https://www.youtube.com/watch?v=save123',
         videoPublicId: 'soccer-stats/match-highlights/11/save',
         durationSeconds: 20,
         fileSizeBytes: 2048,
@@ -453,6 +453,32 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     );
   });
 
+  it('rejects non-YouTube video URLs for match highlights', async () => {
+    const captainApp = buildApp('team_captain', 5);
+    vi.spyOn(storage, 'getMatch').mockResolvedValueOnce({
+      id: 11,
+      tournamentId: 42,
+      homeTeamId: 5,
+      awayTeamId: 6,
+    } as any);
+    const createHighlight = vi.spyOn(storage, 'createMatchHighlight');
+    createHighlight.mockClear();
+
+    const res = await request(captainApp)
+      .post('/api/matches/11/highlights')
+      .send({
+        teamId: 5,
+        title: 'Video externo',
+        highlightType: 'goal',
+        minute: 12,
+        videoUrl: 'https://videos.example.com/play.mp4',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('YouTube');
+    expect(createHighlight).not.toHaveBeenCalled();
+  });
+
   it('lets an admin approve a pending match highlight', async () => {
     vi.spyOn(storage, 'getMatchHighlight').mockResolvedValueOnce({
       id: 1,
@@ -464,7 +490,7 @@ describe('Integration: basic endpoints (mocked storage)', () => {
       description: 'Gran jugada',
       highlightType: 'goal',
       minute: 12,
-      videoUrl: 'https://cdn.example.com/highlight.mp4',
+      videoUrl: 'https://youtu.be/highlight123',
       videoPublicId: 'soccer-stats/match-highlights/9/highlight',
       thumbnailUrl: null,
       uploadedBy: 3,
