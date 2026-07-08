@@ -44,6 +44,72 @@ const statusLabels: Record<string, { label: string; className: string }> = {
   rejected: { label: "Rechazado", className: "bg-red-100 text-red-800" },
 };
 
+function wrapGoalNumber(value: number) {
+  if (value > 9) return 1;
+  if (value < 1) return 9;
+  return value;
+}
+
+function GoalNumberWheel({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const previous = wrapGoalNumber(value - 1);
+  const next = wrapGoalNumber(value + 1);
+
+  const move = (direction: 1 | -1) => {
+    onChange(wrapGoalNumber(value + direction));
+  };
+
+  return (
+    <div
+      className="mx-auto w-36 select-none rounded-2xl border border-border bg-muted/20 p-3 text-center shadow-inner"
+      onWheel={(event) => {
+        event.preventDefault();
+        move(event.deltaY > 0 ? 1 : -1);
+      }}
+      onTouchStart={(event) => setTouchStartY(event.touches[0].clientY)}
+      onTouchEnd={(event) => {
+        if (touchStartY === null) return;
+        const deltaY = touchStartY - event.changedTouches[0].clientY;
+        if (Math.abs(deltaY) > 20) {
+          move(deltaY > 0 ? 1 : -1);
+        }
+        setTouchStartY(null);
+      }}
+      role="spinbutton"
+      aria-valuemin={1}
+      aria-valuemax={9}
+      aria-valuenow={value}
+      aria-label="Número del jugador"
+    >
+      <button
+        type="button"
+        className="w-full rounded-lg py-1 text-muted-foreground"
+        onClick={() => move(-1)}
+        aria-label="Número anterior"
+      >
+        {previous}
+      </button>
+      <div className="my-1 rounded-xl bg-background py-3 text-5xl font-black text-primary shadow-sm">
+        {value}
+      </div>
+      <button
+        type="button"
+        className="w-full rounded-lg py-1 text-muted-foreground"
+        onClick={() => move(1)}
+        aria-label="Número siguiente"
+      >
+        {next}
+      </button>
+    </div>
+  );
+}
+
 function getYouTubeVideoId(videoUrl: string) {
   try {
     const url = new URL(videoUrl);
@@ -115,6 +181,7 @@ export default function MatchDetails() {
       ((auth.userRole === "team_captain" || auth.userRole === "team") &&
         [match?.homeTeamId, match?.awayTeamId].includes(auth.teamId || 0)));
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("unknown");
+  const [selectedScorerNumber, setSelectedScorerNumber] = useState(1);
   const [goalMinute, setGoalMinute] = useState("");
   const [isGoalDialogOpen, setIsGoalDialogOpen] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState("");
@@ -137,9 +204,45 @@ export default function MatchDetails() {
   const isLoading = matchLoading || goalsLoading || !match || !homeTeam || !awayTeam;
   const isFinished = match?.status === "finished";
   const allPlayers = [...(homePlayers || []), ...(awayPlayers || [])];
+  const selectedGoalTeamPlayers =
+    selectedTeamId === String(homeTeam?.id)
+      ? homePlayers || []
+      : selectedTeamId === String(awayTeam?.id)
+        ? awayPlayers || []
+        : [];
+  const selectedScorer = selectedGoalTeamPlayers.find(
+    (player) => Number(player.number) === selectedScorerNumber,
+  );
   const highlightTeamPlayers = allPlayers.filter(
     (player) => String(player.teamId) === highlightTeamId,
   );
+
+  const handleGoalTeamChange = (teamId: string) => {
+    setSelectedTeamId(teamId);
+    if (!homeTeam || !awayTeam) {
+      setSelectedPlayerId("unknown");
+      return;
+    }
+    const players =
+      teamId === String(homeTeam.id)
+        ? homePlayers || []
+        : teamId === String(awayTeam.id)
+          ? awayPlayers || []
+          : [];
+    const player = players.find(
+      (candidate) => Number(candidate.number) === selectedScorerNumber,
+    );
+    setSelectedPlayerId(player ? String(player.id) : "unknown");
+  };
+
+  const handleScorerNumberChange = (number: number) => {
+    const wrappedNumber = wrapGoalNumber(number);
+    setSelectedScorerNumber(wrappedNumber);
+    const player = selectedGoalTeamPlayers.find(
+      (candidate) => Number(candidate.number) === wrappedNumber,
+    );
+    setSelectedPlayerId(player ? String(player.id) : "unknown");
+  };
 
   const handleFinishMatch = async () => {
     if (!match) return;
@@ -176,6 +279,7 @@ export default function MatchDetails() {
       setIsGoalDialogOpen(false);
       setGoalMinute("");
       setSelectedPlayerId("unknown");
+      setSelectedScorerNumber(1);
     } catch (err) {
       toast({ variant: "destructive", title: "Error", description: (err as Error).message });
     }
@@ -394,7 +498,7 @@ export default function MatchDetails() {
                 <form onSubmit={handleAddGoal} className="space-y-4 mt-4">
                   <div className="space-y-2">
                     <Label>Scoring Team</Label>
-                    <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
+                    <Select value={selectedTeamId} onValueChange={handleGoalTeamChange}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select Team" />
                       </SelectTrigger>
@@ -406,21 +510,18 @@ export default function MatchDetails() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Scorer (Optional)</Label>
-                    <Select value={selectedPlayerId} onValueChange={setSelectedPlayerId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Player" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unknown">Unknown Player</SelectItem>
-                        {selectedTeamId === String(homeTeam.id) && homePlayers?.map((p: any) => (
-                          <SelectItem key={p.id} value={String(p.id)}>{p.name} #{p.number}</SelectItem>
-                        ))}
-                        {selectedTeamId === String(awayTeam.id) && awayPlayers?.map((p: any) => (
-                          <SelectItem key={p.id} value={String(p.id)}>{p.name} #{p.number}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Número del jugador</Label>
+                    <GoalNumberWheel
+                      value={selectedScorerNumber}
+                      onChange={handleScorerNumberChange}
+                    />
+                    <p className="text-center text-sm text-muted-foreground">
+                      {selectedTeamId
+                        ? selectedScorer
+                          ? `${selectedScorer.name} #${selectedScorer.number}`
+                          : `No hay jugador con el #${selectedScorerNumber}; se guardará como desconocido.`
+                        : "Primero selecciona el equipo que anotó."}
+                    </p>
                   </div>
 
                   <div className="space-y-2">
