@@ -9,6 +9,7 @@ import {
   useUpdateMatchHighlight,
 } from "@/hooks/use-highlights";
 import { useTeam, useTeamPlayers } from "@/hooks/use-teams";
+import { useTournament } from "@/hooks/use-tournaments";
 import { Layout } from "@/components/Layout";
 import { TeamColorCircleLarge } from "@/components/TeamColor";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ export default function MatchDetails() {
   
   const { data: homeTeam } = useTeam(match?.homeTeamId || 0);
   const { data: awayTeam } = useTeam(match?.awayTeamId || 0);
+  const { data: tournament } = useTournament(match?.tournamentId || 0);
   
   const { data: homePlayersResp } = useTeamPlayers(match?.homeTeamId || 0);
   const { data: awayPlayersResp } = useTeamPlayers(match?.awayTeamId || 0);
@@ -76,7 +78,10 @@ export default function MatchDetails() {
   const { toast } = useToast();
   const { data: auth } = useAuth();
   const canModifyMatch = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager' || auth?.userRole === 'referee';
-  const canReviewHighlights = auth?.userRole === "admin" || auth?.userRole === "tournament_manager";
+  const canReviewHighlights =
+    auth?.userRole === "admin" ||
+    (auth?.userRole === "tournament_manager" &&
+      tournament?.createdBy === auth.userId);
   const canUploadHighlights =
     !!auth &&
     (canReviewHighlights ||
