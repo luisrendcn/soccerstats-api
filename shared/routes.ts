@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { insertTeamSchema, insertPlayerSchema, insertMatchSchema, insertGoalSchema, teams, players, matches, goals } from './schema';
+import { createMatchSchema, insertTeamSchema, insertPlayerSchema, insertMatchSchema, updateMatchSchema, insertGoalSchema, teams, players, matches, goals } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -94,7 +94,7 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/matches',
-      input: insertMatchSchema,
+      input: createMatchSchema,
       responses: {
         201: z.custom<typeof matches.$inferSelect>(),
         400: errorSchemas.validation,
@@ -103,7 +103,7 @@ export const api = {
     update: {
       method: 'PUT' as const,
       path: '/api/matches/:id',
-      input: insertMatchSchema.partial(),
+      input: updateMatchSchema,
       responses: {
         200: z.custom<typeof matches.$inferSelect>(),
         404: errorSchemas.notFound,

@@ -27,8 +27,11 @@ export const matches = pgTable("matches", {
   homeScore: integer("home_score").default(0),
   awayScore: integer("away_score").default(0),
   date: timestamp("date").notNull(),
-  status: text("status").notNull().default("scheduled"), // "scheduled", "finished"
+  status: text("status").notNull().default("scheduled"), // scheduled, live, finished
   location: text("location"),
+  streamPlatform: text("stream_platform"),
+  streamChannel: text("stream_channel"),
+  streamUrl: text("stream_url"),
   deletedAt: timestamp("deleted_at"),
 });
 
@@ -243,6 +246,36 @@ export const createTournamentSchema = z.object({
 });
 
 export const updateTournamentSchema = createTournamentSchema.partial();
+
+const twitchChannelSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-zA-Z0-9_]{3,25}$/, "El canal de Twitch no es válido");
+
+const streamUrlSchema = z
+  .string()
+  .trim()
+  .url("La URL del directo no es válida")
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      const host = url.hostname.replace(/^www\./, "").toLowerCase();
+      return host === "twitch.tv" || host === "m.twitch.tv";
+    } catch {
+      return false;
+    }
+  }, "Pega un enlace válido de Twitch");
+
+export const matchStatusSchema = z.enum(["scheduled", "live", "finished"]);
+
+export const createMatchSchema = insertMatchSchema.extend({
+  status: matchStatusSchema.default("scheduled"),
+  streamPlatform: z.enum(["twitch"]).optional().nullable(),
+  streamChannel: twitchChannelSchema.optional().nullable(),
+  streamUrl: streamUrlSchema.optional().nullable(),
+});
+
+export const updateMatchSchema = createMatchSchema.partial();
 
 export const highlightTypeSchema = z.enum([
   "goal",

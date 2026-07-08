@@ -44,6 +44,72 @@ const isTeamCaptainRole = (role: string) =>
 const MAX_HIGHLIGHT_MINUTE = Number(process.env.MATCH_MAX_MINUTE || 130);
 const MAX_HIGHLIGHT_THUMBNAIL_FILE_SIZE_BYTES =
   Number(process.env.HIGHLIGHT_THUMBNAIL_MAX_FILE_SIZE_MB || 5) * 1024 * 1024;
+const twitchTokenCache: { token: string | null; expiresAt: number } = {
+  token: null,
+  expiresAt: 0,
+};
+
+function normalizeTwitchChannel(value?: string | null) {
+  const input = value?.trim();
+  if (!input) return null;
+  try {
+    const url = new URL(input);
+    const host = url.hostname.replace(/^www\./, "").toLowerCase();
+    if (host !== "twitch.tv" && host !== "m.twitch.tv") return null;
+    const channel = url.pathname.split("/").filter(Boolean)[0];
+    return channel || null;
+  } catch {
+    return input.replace(/^@/, "");
+  }
+}
+
+function buildTwitchUrl(channel?: string | null) {
+  return channel ? `https://www.twitch.tv/${channel}` : null;
+}
+
+async function getTwitchAppAccessToken() {
+  const clientId = process.env.TWITCH_CLIENT_ID;
+  const clientSecret = process.env.TWITCH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+  if (twitchTokenCache.token && Date.now() < twitchTokenCache.expiresAt) {
+    return twitchTokenCache.token;
+  }
+
+  const response = await fetch("https://id.twitch.tv/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "client_credentials",
+    }),
+  });
+  if (!response.ok) return null;
+  const payload = (await response.json()) as {
+    access_token: string;
+    expires_in: number;
+  };
+  twitchTokenCache.token = payload.access_token;
+  twitchTokenCache.expiresAt =
+    Date.now() + Math.max(payload.expires_in - 60, 60) * 1000;
+  return twitchTokenCache.token;
+}
+
+function normalizeMatchStreamFields<T extends Record<string, any>>(input: T): T {
+  const next: Record<string, any> = { ...input };
+  const channel = normalizeTwitchChannel(next.streamChannel || next.streamUrl);
+  if (channel) {
+    next.streamPlatform = "twitch";
+    next.streamChannel = channel;
+    next.streamUrl = buildTwitchUrl(channel);
+  }
+  if (next.streamPlatform === "twitch" && !channel) {
+    next.streamPlatform = null;
+    next.streamChannel = null;
+    next.streamUrl = null;
+  }
+  return next as T;
+}
 
 async function establishSession(
   req: Request,
@@ -807,6 +873,45 @@ export async function registerRoutes(
      MATCHES
   ======================= */
 
+  app.get("/api/twitch/streams/:channel", async (req, res) => {
+    const channel = normalizeTwitchChannel(req.params.channel);
+    if (!channel) {
+      return res.status(400).json({ message: "Canal de Twitch inválido" });
+    }
+
+    const clientId = process.env.TWITCH_CLIENT_ID;
+    const token = await getTwitchAppAccessToken();
+    if (!clientId || !token) {
+      return res.json({
+        configured: false,
+        channel,
+        isLive: null,
+        stream: null,
+      });
+    }
+
+    const response = await fetch(
+      `https://api.twitch.tv/helix/streams?user_login=${encodeURIComponent(channel)}`,
+      {
+        headers: {
+          "Client-Id": clientId,
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      return res.status(502).json({ message: "No se pudo consultar Twitch" });
+    }
+    const payload = (await response.json()) as { data?: any[] };
+    const stream = payload.data?.[0] ?? null;
+    res.json({
+      configured: true,
+      channel,
+      isLive: Boolean(stream),
+      stream,
+    });
+  });
+
   app.get(api.matches.list.path, requirePermission("matches", "read"), async (_req, res) => {
     const matches = await storage.getMatches();
     res.json(matches);
@@ -831,7 +936,9 @@ export async function registerRoutes(
         rawBody.date = new Date(rawBody.date);
       }
 
-      const input = api.matches.create.input.parse(rawBody);
+      const input = api.matches.create.input.parse(
+        normalizeMatchStreamFields(rawBody),
+      );
       if (!input.tournamentId) {
         return res.status(400).json({ message: "El torneo es requerido" });
       }
@@ -905,7 +1012,9 @@ export async function registerRoutes(
         rawBody.date = new Date(rawBody.date);
       }
 
-      const input = api.matches.update.input.parse(rawBody);
+      const input = api.matches.update.input.parse(
+        normalizeMatchStreamFields(rawBody),
+      );
       const existingMatch = await storage.getMatch(matchId);
       if (!existingMatch) {
         return res.status(404).json({ message: "Match not found" });

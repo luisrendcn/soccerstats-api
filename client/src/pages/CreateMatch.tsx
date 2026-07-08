@@ -25,6 +25,8 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [locationName, setLocationName] = useState("");
+  const [status, setStatus] = useState<"scheduled" | "live">("scheduled");
+  const [streamChannel, setStreamChannel] = useState("");
   const {
     data: tournamentTeams,
     isLoading: tournamentTeamsLoading,
@@ -52,7 +54,10 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
         awayTeamId: parseInt(awayTeamId),
         date: dateTime,
         location: locationName || "Main Field",
-        status: "scheduled"
+        status,
+        streamPlatform: streamChannel.trim() ? "twitch" : null,
+        streamChannel: streamChannel.trim() || null,
+        streamUrl: streamChannel.trim() || null,
       });
       
       toast({ title: "Match Scheduled!", description: "The match has been successfully created." });
@@ -126,11 +131,39 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
           <div className="space-y-2">
             <Label>Location</Label>
             <Input 
-              placeholder="e.g. City Stadium" 
+              placeholder="Ej. Estadio, sala o lobby del juego"
               value={locationName} 
               onChange={e => setLocationName(e.target.value)} 
             />
           </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Estado inicial</Label>
+              <Select value={status} onValueChange={(value) => setStatus(value as "scheduled" | "live")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="scheduled">Programado</SelectItem>
+                  <SelectItem value="live">En vivo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Canal o URL de Twitch</Label>
+              <Input
+                placeholder="Ej. efootball_colombia o https://twitch.tv/..."
+                value={streamChannel}
+                onChange={(e) => setStreamChannel(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Para gameplays como eFootball, inicia el directo en Twitch y pega aquí el canal. Soccer Stats mostrará el reproductor en partidos en vivo.
+          </p>
 
         </div>
 

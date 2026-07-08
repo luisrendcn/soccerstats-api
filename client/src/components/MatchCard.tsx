@@ -20,12 +20,13 @@ export function MatchCard({
   showTournament = false,
 }: MatchCardProps) {
   const isFinished = match.status === "finished";
+  const isLive = match.status === "live";
 
   return (
     <Link href={`/matches/${match.id}`}>
       <div className="group relative overflow-hidden bg-card rounded-xl border border-border shadow-sm hover:shadow-md hover:border-primary/20 transition-all duration-300 cursor-pointer">
         {/* Status Stripe */}
-        <div className={`absolute left-0 top-0 bottom-0 w-1 ${isFinished ? 'bg-muted-foreground/30' : 'bg-primary'}`} />
+        <div className={`absolute left-0 top-0 bottom-0 w-1 ${isFinished ? 'bg-muted-foreground/30' : isLive ? 'bg-red-500' : 'bg-primary'}`} />
         
         <div className="p-4 pl-6">
           {showDate && (
@@ -38,8 +39,8 @@ export function MatchCard({
                   </span>
                 )}
               </div>
-              <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isFinished ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'}`}>
-                {match.status}
+              <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isFinished ? 'bg-muted text-muted-foreground' : isLive ? 'bg-red-100 text-red-700' : 'bg-primary/10 text-primary'}`}>
+                {isLive ? "en vivo" : match.status}
               </span>
             </div>
           )}

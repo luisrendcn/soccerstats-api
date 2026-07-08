@@ -5,11 +5,15 @@ import { useTeams } from "@/hooks/use-teams";
 import { api } from "@shared/routes";
 import { Layout } from "@/components/Layout";
 import { MatchCard } from "@/components/MatchCard";
-import { Loader2, Trash } from "lucide-react";
+import { Loader2, Radio, Trash } from "lucide-react";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
+import {
+  getTwitchChannelFromMatch,
+  TwitchStreamCard,
+} from "@/components/TwitchStreamCard";
 
 export default function Matches() {
   const { t } = useLanguage();
@@ -21,7 +25,7 @@ export default function Matches() {
   const matches = matchesResp;
   const totalPages = 1; // Single page for now
   const teams = teamsResp;
-  const [filter, setFilter] = useState<'all' | 'scheduled' | 'finished'>('all');
+  const [filter, setFilter] = useState<'live' | 'all' | 'scheduled' | 'finished'>('live');
   const { data: auth } = useAuth();
   const canDeleteMatches = auth?.userRole === "admin";
   const isLoading = matchesLoading || teamsLoading;
@@ -38,13 +42,20 @@ export default function Matches() {
     .sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
+  const liveMatches = enrichedMatches?.filter(
+    (match) => match.status === "live" || Boolean(getTwitchChannelFromMatch(match)),
+  );
 
   const filteredMatches = enrichedMatches?.filter((m: any) => {
+    if (filter === 'live') {
+      return m.status === "live" || Boolean(getTwitchChannelFromMatch(m));
+    }
     if (filter === 'all') return true;
     return m.status === filter;
   });
 
-  const filterLabels: Record<'all' | 'scheduled' | 'finished', string> = {
+  const filterLabels: Record<'live' | 'all' | 'scheduled' | 'finished', string> = {
+    live: 'En vivo',
     all: t('all'),
     scheduled: t('scheduled'),
     finished: t('finished'),
@@ -52,9 +63,37 @@ export default function Matches() {
 
   return (
     <Layout title={t('matchSchedule')}>
+      <div className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 font-display text-lg font-bold">
+              <Radio className="h-5 w-5 text-red-500" />
+              Partidos en vivo
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Transmisiones de torneos y gameplays, por ejemplo eFootball, desde Twitch.
+            </p>
+          </div>
+          <span className="rounded-full bg-background px-3 py-1 text-xs font-bold text-primary shadow-sm">
+            {liveMatches?.length || 0}
+          </span>
+        </div>
+        {liveMatches?.length ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {liveMatches.slice(0, 2).map((match: any) => (
+              <TwitchStreamCard key={match.id} match={match} compact />
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-xl border border-dashed border-border bg-background/70 p-4 text-center text-sm text-muted-foreground">
+            Todavía no hay partidos en vivo. Al crear un partido puedes asociar un canal de Twitch.
+          </p>
+        )}
+      </div>
+
       {/* Filter Tabs */}
       <div className="flex p-1 bg-muted/50 rounded-xl mb-6">
-        {(['all', 'scheduled', 'finished'] as const).map((f) => (
+        {(['live', 'all', 'scheduled', 'finished'] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -68,7 +107,12 @@ export default function Matches() {
       </div>
 
       <div className="space-y-4 mb-20">
-        {filteredMatches?.map((match: any) => (
+        {filter === "live" &&
+          filteredMatches?.map((match: any) => (
+            <TwitchStreamCard key={match.id} match={match} />
+          ))}
+
+        {filter !== "live" && filteredMatches?.map((match: any) => (
           <div key={match.id} className="relative">
             <MatchCard match={match} />
             {canDeleteMatches && (

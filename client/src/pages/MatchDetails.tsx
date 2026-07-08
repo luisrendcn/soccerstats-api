@@ -12,6 +12,7 @@ import { useTeam, useTeamPlayers } from "@/hooks/use-teams";
 import { useTournament } from "@/hooks/use-tournaments";
 import { Layout } from "@/components/Layout";
 import { TeamColorCircleLarge } from "@/components/TeamColor";
+import { TwitchStreamCard, getTwitchChannelFromMatch } from "@/components/TwitchStreamCard";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -224,6 +225,8 @@ export default function MatchDetails() {
 
   const isLoading = matchLoading || goalsLoading || !match || !homeTeam || !awayTeam;
   const isFinished = match?.status === "finished";
+  const isLive = match?.status === "live";
+  const hasTwitchStream = match ? Boolean(getTwitchChannelFromMatch(match)) : false;
   const currentOptimisticScore =
     optimisticScore?.matchId === match?.id ? optimisticScore : null;
   const displayedHomeScore =
@@ -316,6 +319,23 @@ export default function MatchDetails() {
       toast({ title: "Match Finished", description: "Final score has been recorded." });
     } catch (err) {
       toast({ variant: "destructive", title: "Error", description: "Failed to finish match" });
+    }
+  };
+
+  const handleStartLive = async () => {
+    if (!match) return;
+    try {
+      await updateMatch.mutateAsync({ id: match.id, status: "live" });
+      toast({
+        title: "Partido en vivo",
+        description: "El partido quedó marcado como transmisión en vivo.",
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No se pudo marcar el partido como en vivo",
+      });
     }
   };
 
@@ -500,7 +520,7 @@ export default function MatchDetails() {
       {/* Scoreboard */}
       <div className="bg-card rounded-2xl shadow-lg border border-border overflow-hidden mb-8">
         <div className="bg-muted/30 p-3 text-center text-xs font-mono uppercase tracking-widest text-muted-foreground border-b border-border/50 flex justify-center items-center gap-2">
-          {isFinished ? <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="w-3 h-3"/> Final Score</span> : <span className="flex items-center gap-1 text-primary"><Clock className="w-3 h-3"/> Live Match</span>}
+          {isFinished ? <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="w-3 h-3"/> Final Score</span> : isLive ? <span className="flex items-center gap-1 text-red-500"><Clock className="w-3 h-3"/> En vivo</span> : <span className="flex items-center gap-1 text-primary"><Clock className="w-3 h-3"/> Live Match</span>}
         </div>
         
         <div className="p-4 sm:p-6">
@@ -624,11 +644,29 @@ export default function MatchDetails() {
               <Button variant="outline" className="w-full" onClick={handleFinishMatch} disabled={updateMatch.isPending}>
                 End Match
               </Button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+              {!isLive && hasTwitchStream && (
+                <Button type="button" variant="secondary" className="w-full" onClick={handleStartLive} disabled={updateMatch.isPending}>
+                  Marcar en vivo
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+
+      {hasTwitchStream && match && (
+        <div className="mb-8">
+          <TwitchStreamCard
+            match={{
+              ...match,
+              homeTeam,
+              awayTeam,
+              tournament,
+            }}
+          />
+        </div>
+      )}
 
       {/* Match Events */}
       <div className="space-y-4">

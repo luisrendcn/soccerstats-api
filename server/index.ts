@@ -174,6 +174,9 @@ app.use((req, res, next) => {
     await db.execute(sql`ALTER TABLE players ADD COLUMN IF NOT EXISTS deleted_at timestamp`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS deleted_at timestamp`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS tournament_id integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_platform text`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_channel text`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_url text`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS registration_requests (
         id serial PRIMARY KEY,
