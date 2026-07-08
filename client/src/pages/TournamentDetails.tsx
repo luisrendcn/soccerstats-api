@@ -11,7 +11,7 @@ import { TeamColorCircleSmall } from "@/components/TeamColor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, Plus, Trash2, Calendar } from "lucide-react";
+import { Loader2, ArrowLeft, Plus, Trash2, Calendar, Gamepad2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -72,10 +72,21 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamColor, setNewTeamColor] = useState("#000000");
+  const [newTeamTwitchChannel, setNewTeamTwitchChannel] = useState("");
+  const [selectedTeamTwitchChannel, setSelectedTeamTwitchChannel] = useState("");
+  const isVideogameTournament = tournament?.tournamentType === "videogame";
 
   const handleCreateTeam = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!newTeamName.trim()) return;
+    if (isVideogameTournament && !newTeamTwitchChannel.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Canal requerido",
+        description: "Agrega el canal de Twitch del participante",
+      });
+      return;
+    }
 
     try {
       await createTeam.mutateAsync({
@@ -84,9 +95,11 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
           name: newTeamName.trim(),
           color: newTeamColor,
         },
+        twitchChannel: newTeamTwitchChannel.trim() || null,
       });
       setNewTeamName("");
       setNewTeamColor("#000000");
+      setNewTeamTwitchChannel("");
       setIsCreateTeamOpen(false);
       toast({ title: "✓ Equipo creado e inscrito en el torneo" });
     } catch (error) {
@@ -107,13 +120,23 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
       });
       return;
     }
+    if (isVideogameTournament && !selectedTeamTwitchChannel.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Canal requerido",
+        description: "Agrega el canal de Twitch del participante",
+      });
+      return;
+    }
 
     try {
       await addTeam.mutateAsync({
         tournamentId,
         teamId: Number(selectedTeamId),
+        twitchChannel: selectedTeamTwitchChannel.trim() || null,
       });
       setSelectedTeamId("");
+      setSelectedTeamTwitchChannel("");
       toast({ title: "✓ Equipo agregado" });
     } catch (error) {
       toast({
@@ -198,6 +221,20 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
         </Badge>
       </div>
 
+      {isVideogameTournament && (
+        <Card className="border-primary/20 bg-primary/5 p-4">
+          <div className="flex items-start gap-3">
+            <Gamepad2 className="mt-0.5 h-5 w-5 text-primary" />
+            <div>
+              <h2 className="font-display text-lg font-bold">Torneo de videojuego</h2>
+              <p className="text-sm text-muted-foreground">
+                Cada participante debe tener canal de Twitch. Los partidos pueden mostrarse en directo desde esos canales.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* standings for this tournament */}
       <StandingsTable tournamentId={tournamentId} title={standingsTitle} />
 
@@ -266,10 +303,29 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                         </span>
                       </div>
                     </div>
+                    {isVideogameTournament && (
+                      <div className="space-y-2">
+                        <Label htmlFor="tournament-team-twitch">
+                          Canal de Twitch *
+                        </Label>
+                        <Input
+                          id="tournament-team-twitch"
+                          value={newTeamTwitchChannel}
+                          onChange={(event) =>
+                            setNewTeamTwitchChannel(event.target.value)
+                          }
+                          placeholder="Ej. jugador_efootball"
+                        />
+                      </div>
+                    )}
                     <Button
                       type="submit"
                       className="w-full"
-                      disabled={createTeam.isPending || !newTeamName.trim()}
+                      disabled={
+                        createTeam.isPending ||
+                        !newTeamName.trim() ||
+                        (isVideogameTournament && !newTeamTwitchChannel.trim())
+                      }
                     >
                       {createTeam.isPending ? "Creando..." : "Crear e inscribir equipo"}
                     </Button>
@@ -309,7 +365,14 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
               <Card key={team.id} className="p-4 flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <TeamColorCircleSmall color={team.color} />
-                  <span className="font-semibold">{team.name}</span>
+                  <div>
+                    <span className="font-semibold">{team.name}</span>
+                    {isVideogameTournament && (
+                      <p className="text-xs text-muted-foreground">
+                        Twitch: @{team.twitchChannel || "sin canal"}
+                      </p>
+                    )}
+                  </div>
                 </div>
                 {canManageTournaments && (
                   <Button
@@ -344,7 +407,11 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
             </Select>
             <Button
               onClick={handleAddTeam}
-              disabled={addTeam.isPending || !selectedTeamId}
+              disabled={
+                addTeam.isPending ||
+                !selectedTeamId ||
+                (isVideogameTournament && !selectedTeamTwitchChannel.trim())
+              }
             >
               {addTeam.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -356,6 +423,19 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
               )}
             </Button>
           </div>
+          {isVideogameTournament && (
+            <div className="mt-4 space-y-2">
+              <Label htmlFor="existing-team-twitch">Canal de Twitch *</Label>
+              <Input
+                id="existing-team-twitch"
+                value={selectedTeamTwitchChannel}
+                onChange={(event) =>
+                  setSelectedTeamTwitchChannel(event.target.value)
+                }
+                placeholder="Ej. jugador_efootball"
+              />
+            </div>
+          )}
         </Card>
       )}
 

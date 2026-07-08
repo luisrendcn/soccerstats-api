@@ -97,11 +97,19 @@ export function useDeleteTournament() {
 export function useAddTeamToTournament() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ tournamentId, teamId }: { tournamentId: number; teamId: number }) => {
+    mutationFn: async ({
+      tournamentId,
+      teamId,
+      twitchChannel,
+    }: {
+      tournamentId: number;
+      teamId: number;
+      twitchChannel?: string | null;
+    }) => {
       const res = await apiFetch(`/api/tournaments/${tournamentId}/teams`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamId }),
+        body: JSON.stringify({ teamId, twitchChannel }),
         credentials: "include",
       });
       if (!res.ok) {
@@ -117,18 +125,26 @@ export function useAddTeamToTournament() {
 export function useCreateTournamentTeam() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ tournamentId, team }: { tournamentId: number; team: InsertTeam }) => {
+    mutationFn: async ({
+      tournamentId,
+      team,
+      twitchChannel,
+    }: {
+      tournamentId: number;
+      team: InsertTeam;
+      twitchChannel?: string | null;
+    }) => {
       const res = await apiFetch(`/api/tournaments/${tournamentId}/teams/new`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(team),
+        body: JSON.stringify({ ...team, twitchChannel }),
         credentials: "include",
       });
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.message || "Failed to create tournament team");
       }
-      return res.json() as Promise<Team>;
+      return res.json() as Promise<TournamentTeamWithMeta>;
     },
     onSuccess: () => refreshAppData(queryClient),
   });
@@ -158,8 +174,12 @@ export function useTournamentTeams(tournamentId: number) {
     queryFn: async () => {
       const res = await apiFetch(`/api/tournaments/${tournamentId}/teams`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch tournament teams");
-      return res.json() as Promise<Team[]>;
+      return res.json() as Promise<TournamentTeamWithMeta[]>;
     },
     enabled: !!tournamentId,
   });
 }
+export type TournamentTeamWithMeta = Team & {
+  tournamentId: number;
+  twitchChannel: string | null;
+};

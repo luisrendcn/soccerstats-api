@@ -99,9 +99,15 @@ export interface IStorage {
   createTournament(tournament: InsertTournament): Promise<Tournament>;
   updateTournament(id: number, updates: Partial<InsertTournament>): Promise<Tournament>;
   deleteTournament(id: number): Promise<void>;
-  addTeamToTournament(tournamentId: number, teamId: number): Promise<TournamentTeam>;
+  addTeamToTournament(
+    tournamentId: number,
+    teamId: number,
+    data?: { twitchChannel?: string | null },
+  ): Promise<TournamentTeam>;
   removeTeamFromTournament(tournamentId: number, teamId: number): Promise<void>;
-  getTournamentTeams(tournamentId: number): Promise<Array<Team & { tournamentId: number }>>;
+  getTournamentTeams(
+    tournamentId: number,
+  ): Promise<Array<Team & { tournamentId: number; twitchChannel: string | null }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -486,10 +492,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(tournaments.id, id));
   }
 
-  async addTeamToTournament(tournamentId: number, teamId: number): Promise<TournamentTeam> {
+  async addTeamToTournament(
+    tournamentId: number,
+    teamId: number,
+    data?: { twitchChannel?: string | null },
+  ): Promise<TournamentTeam> {
     const [relation] = await db
       .insert(tournamentTeams)
-      .values({ tournamentId, teamId })
+      .values({ tournamentId, teamId, twitchChannel: data?.twitchChannel ?? null })
       .returning();
     return relation;
   }
@@ -500,7 +510,9 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(tournamentTeams.tournamentId, tournamentId), eq(tournamentTeams.teamId, teamId)));
   }
 
-  async getTournamentTeams(tournamentId: number): Promise<Array<Team & { tournamentId: number }>> {
+  async getTournamentTeams(
+    tournamentId: number,
+  ): Promise<Array<Team & { tournamentId: number; twitchChannel: string | null }>> {
     const results: any = await db
       .select({
         tournament: tournamentTeams,
@@ -512,6 +524,7 @@ export class DatabaseStorage implements IStorage {
     return results.map((row: any) => ({
       ...row.team,
       tournamentId: row.tournament.tournamentId,
+      twitchChannel: row.tournament.twitchChannel ?? null,
     }));
   }
 }

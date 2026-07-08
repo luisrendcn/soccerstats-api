@@ -30,6 +30,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    tournamentType: "soccer" as "soccer" | "videogame",
     startDate: "",
     endDate: "",
     status: "draft" as "draft" | "active" | "finished",
@@ -40,6 +41,9 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
       setFormData({
         name: existingTournament.name || "",
         description: existingTournament.description || "",
+        tournamentType:
+          (existingTournament.tournamentType as "soccer" | "videogame") ||
+          "soccer",
         startDate: existingTournament.startDate
           ? new Date(existingTournament.startDate).toISOString().split("T")[0]
           : "",
@@ -76,6 +80,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
       const data = {
         name: formData.name,
         description: formData.description || undefined,
+        tournamentType: formData.tournamentType,
         startDate: new Date(formData.startDate).toISOString(),
         endDate: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
         status: formData.status,
@@ -143,6 +148,30 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
               }
               rows={4}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tournamentType">Tipo de torneo</Label>
+            <Select
+              value={formData.tournamentType}
+              onValueChange={(value) =>
+                setFormData({
+                  ...formData,
+                  tournamentType: value as "soccer" | "videogame",
+                })
+              }
+            >
+              <SelectTrigger id="tournamentType">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="soccer">Fútbol</SelectItem>
+                <SelectItem value="videogame">Videojuego / eFootball</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              En torneos de videojuego, cada participante inscrito debe tener canal de Twitch.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

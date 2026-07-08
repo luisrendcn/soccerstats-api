@@ -91,6 +91,7 @@ export const tournaments = pgTable("tournaments", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
+  tournamentType: text("tournament_type").notNull().default("soccer"),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date"),
   status: text("status").notNull().default("draft"), // draft, active, finished
@@ -104,6 +105,7 @@ export const tournamentTeams = pgTable("tournament_teams", {
   id: serial("id").primaryKey(),
   tournamentId: integer("tournament_id").notNull(),
   teamId: integer("team_id").notNull(),
+  twitchChannel: text("twitch_channel"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -240,6 +242,7 @@ export const registerSchema = insertUserSchema.omit({ role: true, teamId: true, 
 export const createTournamentSchema = z.object({
   name: z.string().min(2, "El nombre es requerido").max(100),
   description: z.string().optional(),
+  tournamentType: z.enum(["soccer", "videogame"]).default("soccer"),
   startDate: z.date().or(z.string().datetime()),
   endDate: z.date().or(z.string().datetime()).optional(),
   status: z.enum(["draft", "active", "finished"]).default("draft"),

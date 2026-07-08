@@ -63,6 +63,10 @@ function normalizeTwitchChannel(value?: string | null) {
   }
 }
 
+function isValidTwitchChannel(channel?: string | null) {
+  return !!channel && /^[a-zA-Z0-9_]{3,25}$/.test(channel);
+}
+
 function buildTwitchUrl(channel?: string | null) {
   return channel ? `https://www.twitch.tv/${channel}` : null;
 }
@@ -109,6 +113,24 @@ function normalizeMatchStreamFields<T extends Record<string, any>>(input: T): T 
     next.streamUrl = null;
   }
   return next as T;
+}
+
+function getTournamentTeamTwitchChannel(
+  req: Request,
+  tournament: { tournamentType?: string | null },
+) {
+  const channel = normalizeTwitchChannel(req.body.twitchChannel);
+  if (tournament.tournamentType === "videogame" && !isValidTwitchChannel(channel)) {
+    return {
+      ok: false as const,
+      message:
+        "El canal de Twitch es obligatorio para equipos en torneos de videojuego",
+    };
+  }
+  if (channel && !isValidTwitchChannel(channel)) {
+    return { ok: false as const, message: "El canal de Twitch no es válido" };
+  }
+  return { ok: true as const, twitchChannel: channel || null };
 }
 
 async function establishSession(
@@ -765,7 +787,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "teamId es requerido" });
       }
 
-      const relation = await storage.addTeamToTournament(tournamentId, teamId);
+      const twitch = getTournamentTeamTwitchChannel(req, tournament);
+      if (!twitch.ok) {
+        return res.status(400).json({ message: twitch.message });
+      }
+
+      const relation = await storage.addTeamToTournament(tournamentId, teamId, {
+        twitchChannel: twitch.twitchChannel,
+      });
       res.status(201).json(relation);
     } catch (err) {
       throw err;
@@ -778,10 +807,18 @@ export async function registerRoutes(
       const tournament = await getManageableTournament(req, res, tournamentId);
       if (!tournament) return;
 
-      const input = api.teams.create.input.parse(req.body);
+      const twitch = getTournamentTeamTwitchChannel(req, tournament);
+      if (!twitch.ok) {
+        return res.status(400).json({ message: twitch.message });
+      }
+
+      const { twitchChannel: _twitchChannel, ...teamBody } = req.body;
+      const input = api.teams.create.input.parse(teamBody);
       const team = await storage.createTeam(input);
-      await storage.addTeamToTournament(tournamentId, team.id);
-      res.status(201).json(team);
+      const relation = await storage.addTeamToTournament(tournamentId, team.id, {
+        twitchChannel: twitch.twitchChannel,
+      });
+      res.status(201).json({ ...team, twitchChannel: relation.twitchChannel ?? null });
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.issues[0].message });
@@ -965,7 +1002,40 @@ export async function registerRoutes(
         });
       }
 
-      const match = await storage.createMatch(input);
+      const matchInput = { ...input };
+      if (tournament.tournamentType === "videogame") {
+        const homeTournamentTeam = tournamentTeams.find(
+          (team) => team.id === input.homeTeamId,
+        );
+        const awayTournamentTeam = tournamentTeams.find(
+          (team) => team.id === input.awayTeamId,
+        );
+        const allowedChannels = [
+          homeTournamentTeam?.twitchChannel,
+          awayTournamentTeam?.twitchChannel,
+        ].filter(isValidTwitchChannel);
+        if (allowedChannels.length < 2) {
+          return res.status(400).json({
+            message:
+              "Los equipos de un torneo de videojuego deben tener canal de Twitch",
+          });
+        }
+        const requestedChannel =
+          normalizeTwitchChannel(matchInput.streamChannel || matchInput.streamUrl) ||
+          homeTournamentTeam?.twitchChannel;
+        if (!allowedChannels.includes(requestedChannel || "")) {
+          return res.status(400).json({
+            message:
+              "El canal de transmisión debe pertenecer a uno de los equipos del partido",
+          });
+        }
+        matchInput.status = matchInput.status || "scheduled";
+        matchInput.streamPlatform = "twitch";
+        matchInput.streamChannel = requestedChannel!;
+        matchInput.streamUrl = buildTwitchUrl(requestedChannel);
+      }
+
+      const match = await storage.createMatch(matchInput);
       res.status(201).json(match);
     } catch (err) {
       if (err instanceof z.ZodError) {

@@ -43,12 +43,12 @@ export default function Matches() {
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
   const liveMatches = enrichedMatches?.filter(
-    (match) => match.status === "live" || Boolean(getTwitchChannelFromMatch(match)),
+    (match) => Boolean(getTwitchChannelFromMatch(match)),
   );
 
   const filteredMatches = enrichedMatches?.filter((m: any) => {
     if (filter === 'live') {
-      return m.status === "live" || Boolean(getTwitchChannelFromMatch(m));
+      return Boolean(getTwitchChannelFromMatch(m));
     }
     if (filter === 'all') return true;
     return m.status === filter;

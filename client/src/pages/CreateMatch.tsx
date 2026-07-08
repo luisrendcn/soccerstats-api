@@ -31,6 +31,10 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
     data: tournamentTeams,
     isLoading: tournamentTeamsLoading,
   } = useTournamentTeams(tournamentId);
+  const isVideogameTournament = tournament?.tournamentType === "videogame";
+  const selectedMatchTeams = tournamentTeams?.filter((team) =>
+    [homeTeamId, awayTeamId].includes(String(team.id)),
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +46,27 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
     if (homeTeamId === awayTeamId) {
       toast({ variant: "destructive", title: "Invalid Matchup", description: "Home and Away teams must be different." });
       return;
+    }
+    if (isVideogameTournament) {
+      const teamsWithoutTwitch =
+        selectedMatchTeams?.filter((team) => !team.twitchChannel) || [];
+      if (teamsWithoutTwitch.length > 0) {
+        toast({
+          variant: "destructive",
+          title: "Falta canal de Twitch",
+          description:
+            "Ambos participantes deben tener canal de Twitch inscrito en el torneo.",
+        });
+        return;
+      }
+      if (!streamChannel) {
+        toast({
+          variant: "destructive",
+          title: "Canal requerido",
+          description: "Selecciona el canal que transmitirá este partido.",
+        });
+        return;
+      }
     }
 
     try {
@@ -55,9 +80,9 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
         date: dateTime,
         location: locationName || "Main Field",
         status,
-        streamPlatform: streamChannel.trim() ? "twitch" : null,
-        streamChannel: streamChannel.trim() || null,
-        streamUrl: streamChannel.trim() || null,
+        streamPlatform: isVideogameTournament ? "twitch" : null,
+        streamChannel: isVideogameTournament ? streamChannel : null,
+        streamUrl: isVideogameTournament ? streamChannel : null,
       });
       
       toast({ title: "Match Scheduled!", description: "The match has been successfully created." });
@@ -81,7 +106,13 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Home Team</Label>
-              <Select value={homeTeamId} onValueChange={setHomeTeamId}>
+              <Select
+                value={homeTeamId}
+                onValueChange={(value) => {
+                  setHomeTeamId(value);
+                  setStreamChannel("");
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
@@ -95,7 +126,13 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
 
             <div className="space-y-2">
               <Label>Away Team</Label>
-              <Select value={awayTeamId} onValueChange={setAwayTeamId}>
+              <Select
+                value={awayTeamId}
+                onValueChange={(value) => {
+                  setAwayTeamId(value);
+                  setStreamChannel("");
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
@@ -137,41 +174,64 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Estado inicial</Label>
-              <Select value={status} onValueChange={(value) => setStatus(value as "scheduled" | "live")}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Estado" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="scheduled">Programado</SelectItem>
-                  <SelectItem value="live">En vivo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Canal o URL de Twitch</Label>
-              <Input
-                placeholder="Ej. efootball_colombia o https://twitch.tv/..."
-                value={streamChannel}
-                onChange={(e) => setStreamChannel(e.target.value)}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>Estado inicial</Label>
+            <Select value={status} onValueChange={(value) => setStatus(value as "scheduled" | "live")}>
+              <SelectTrigger>
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="scheduled">Programado</SelectItem>
+                <SelectItem value="live">En vivo</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <p className="text-xs text-muted-foreground">
-            Para gameplays como eFootball, inicia el directo en Twitch y pega aquí el canal. Soccer Stats mostrará el reproductor en partidos en vivo.
-          </p>
+          {isVideogameTournament && (
+            <div className="space-y-2">
+              <Label>Canal que transmitirá</Label>
+              <Select
+                value={streamChannel}
+                onValueChange={setStreamChannel}
+                disabled={!homeTeamId || !awayTeamId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona canal de Twitch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedMatchTeams?.map((team) => (
+                    <SelectItem
+                      key={team.id}
+                      value={team.twitchChannel || String(team.id)}
+                      disabled={!team.twitchChannel}
+                    >
+                      {team.name} - @{team.twitchChannel || "sin canal"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Los canales vienen de los participantes inscritos en este torneo de videojuego.
+              </p>
+            </div>
+          )}
 
+          {!isVideogameTournament && (
+            <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
+              Las transmisiones de Twitch se habilitan creando un torneo de videojuego.
+            </p>
+          )}
         </div>
 
         <Button
           type="submit"
           size="lg"
           className="w-full font-bold text-lg h-12 shadow-lg shadow-primary/20"
-          disabled={createMatch.isPending || (tournamentTeams?.length || 0) < 2}
+          disabled={
+            createMatch.isPending ||
+            (tournamentTeams?.length || 0) < 2 ||
+            (isVideogameTournament && !streamChannel)
+          }
         >
           {createMatch.isPending ? "Scheduling..." : "Create Match"}
         </Button>

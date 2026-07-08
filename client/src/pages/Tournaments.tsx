@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, Trash2, Calendar, MapPin } from "lucide-react";
+import { Loader2, Plus, Trash2, Calendar, Gamepad2 } from "lucide-react";
 import { useDeleteTournament } from "@/hooks/use-tournaments";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -90,9 +90,17 @@ export default function Tournaments() {
                     <p className="text-sm text-muted-foreground mt-1">{tournament.description}</p>
                   )}
                 </div>
-                <Badge variant={statusLabels[tournament.status]?.variant || "secondary"}>
-                  {statusLabels[tournament.status]?.label || tournament.status}
-                </Badge>
+                <div className="flex flex-col items-end gap-2">
+                  <Badge variant={statusLabels[tournament.status]?.variant || "secondary"}>
+                    {statusLabels[tournament.status]?.label || tournament.status}
+                  </Badge>
+                  {tournament.tournamentType === "videogame" && (
+                    <Badge className="bg-primary/10 text-primary">
+                      <Gamepad2 className="mr-1 h-3 w-3" />
+                      Videojuego
+                    </Badge>
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-4 text-sm text-muted-foreground mb-4">

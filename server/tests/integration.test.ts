@@ -122,11 +122,24 @@ vi.mock('../storage', () => {
       reviewedBy: adminId,
     }),
     getTournaments: async () => [],
-    getTournamentById: async (id: number) => ({ id, name: `Tournament ${id}` }),
+    getTournamentById: async (id: number) => ({
+      id,
+      name: `Tournament ${id}`,
+      tournamentType: 'soccer',
+    }),
     createTournament: async (t: any) => ({ id: 1, ...t }),
     updateTournament: async (id: number, updates: any) => ({ id, ...updates }),
     deleteTournament: async () => {},
-    addTeamToTournament: async (tId: number, teamId: number) => ({ id: 1, tournamentId: tId, teamId }),
+    addTeamToTournament: async (
+      tId: number,
+      teamId: number,
+      data?: { twitchChannel?: string | null },
+    ) => ({
+      id: 1,
+      tournamentId: tId,
+      teamId,
+      twitchChannel: data?.twitchChannel ?? null,
+    }),
     removeTeamFromTournament: async () => {},
     getTournamentTeams: async () => [],
   };
@@ -303,7 +316,41 @@ describe('Integration: basic endpoints (mocked storage)', () => {
 
     expect(res.status).toBe(201);
     expect(createTeam).toHaveBeenCalledWith(expect.objectContaining({ name: 'Tournament Team' }));
-    expect(enrollTeam).toHaveBeenCalledWith(42, 2);
+    expect(enrollTeam).toHaveBeenCalledWith(42, 2, { twitchChannel: null });
+  });
+
+  it('requires a Twitch channel when creating a team in a videogame tournament', async () => {
+    vi.spyOn(storage, 'getTournamentById').mockResolvedValueOnce({
+      id: 42,
+      name: 'eFootball Cup',
+      createdBy: 1,
+      tournamentType: 'videogame',
+    } as any);
+
+    const missing = await request(app)
+      .post('/api/tournaments/42/teams/new')
+      .send({ name: 'Player One', color: '#123456' });
+
+    expect(missing.status).toBe(400);
+    expect(missing.body.message).toContain('Twitch');
+
+    vi.spyOn(storage, 'getTournamentById').mockResolvedValueOnce({
+      id: 42,
+      name: 'eFootball Cup',
+      createdBy: 1,
+      tournamentType: 'videogame',
+    } as any);
+
+    const created = await request(app)
+      .post('/api/tournaments/42/teams/new')
+      .send({
+        name: 'Player One',
+        color: '#123456',
+        twitchChannel: 'player_one',
+      });
+
+    expect(created.status).toBe(201);
+    expect(created.body.twitchChannel).toBe('player_one');
   });
 
   it('lets a tournament manager manage tournaments they created', async () => {
