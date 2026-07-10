@@ -256,6 +256,10 @@ const translations = {
     morePages: 'More pages',
     previousSlide: 'Previous slide',
     nextSlide: 'Next slide',
+    updateAvailableTitle: 'Update available',
+    updateAvailableDescription: 'You have version {currentVersion}. Version {latestVersion} is available.',
+    updateNow: 'Update now',
+    updateLater: 'Later',
 
     // Settings
     settings: 'Settings',
@@ -648,6 +652,10 @@ const translations = {
     morePages: 'Más páginas',
     previousSlide: 'Diapositiva anterior',
     nextSlide: 'Diapositiva siguiente',
+    updateAvailableTitle: 'Actualización disponible',
+    updateAvailableDescription: 'Tienes la versión {currentVersion}. La versión {latestVersion} está disponible.',
+    updateNow: 'Actualizar ahora',
+    updateLater: 'Más tarde',
 
     // Settings
     settings: 'Configuración',

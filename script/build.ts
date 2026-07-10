@@ -1,6 +1,6 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { rm } from "fs/promises";
+import { cp, mkdir, rm } from "fs/promises";
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
@@ -21,6 +21,12 @@ async function buildAll() {
     minify: true,
     packages: "external",
     logLevel: "info",
+  });
+
+  await mkdir("server/public/downloads", { recursive: true });
+  await cp("server/public/downloads", "dist/downloads", {
+    recursive: true,
+    force: true,
   });
 }
 

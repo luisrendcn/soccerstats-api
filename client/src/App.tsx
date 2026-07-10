@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LanguageProvider } from "@/lib/i18n.tsx";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AppUpdatePrompt } from "@/components/AppUpdatePrompt";
 import { Loader2 } from "lucide-react";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -60,6 +61,7 @@ function App() {
       <LanguageProvider>
         <TooltipProvider>
           <Toaster />
+          <AppUpdatePrompt />
           <Suspense fallback={<RouteFallback />}>
             <Router />
           </Suspense>

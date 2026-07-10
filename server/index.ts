@@ -8,11 +8,18 @@ import pg from "pg";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import path from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import {
+  ANDROID_APK_PATH,
+  LATEST_ANDROID_VERSION_CODE,
+  LATEST_ANDROID_VERSION_NAME,
+  MIN_SUPPORTED_ANDROID_VERSION_CODE,
+} from "@shared/app-version";
 
 const app = express();
 const httpServer = createServer(app);
@@ -48,6 +55,40 @@ app.use(
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+const downloadsPath = path.resolve(import.meta.dirname, "downloads");
+app.use("/downloads", express.static(downloadsPath));
+
+app.get("/api/app-update", (req, res) => {
+  const baseUrl =
+    process.env.APP_PUBLIC_BASE_URL ||
+    `${req.protocol}://${req.get("host")}`;
+  const configuredUrl = process.env.ANDROID_APK_URL || ANDROID_APK_PATH;
+  const updateUrl = /^https?:\/\//.test(configuredUrl)
+    ? configuredUrl
+    : `${baseUrl}${configuredUrl}`;
+  const minimumSupportedVersionCode = Number(
+    process.env.MIN_SUPPORTED_ANDROID_VERSION_CODE ||
+      MIN_SUPPORTED_ANDROID_VERSION_CODE,
+  );
+  const latestVersionCode = Number(
+    process.env.LATEST_ANDROID_VERSION_CODE || LATEST_ANDROID_VERSION_CODE,
+  );
+
+  res.json({
+    platform: "android",
+    latestVersionCode,
+    latestVersionName:
+      process.env.LATEST_ANDROID_VERSION_NAME ||
+      LATEST_ANDROID_VERSION_NAME,
+    minimumSupportedVersionCode,
+    updateUrl,
+    releaseNotes: process.env.ANDROID_RELEASE_NOTES || "",
+    forceUpdate:
+      Number(req.query.currentVersionCode || 0) > 0 &&
+      Number(req.query.currentVersionCode) < minimumSupportedVersionCode,
+  });
 });
 
 declare module "http" {
