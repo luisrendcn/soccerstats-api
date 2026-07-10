@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { useRoute } from "wouter";
 import { useTeam, useTeamPlayers, useCreatePlayer } from "@/hooks/use-teams";
-import { api } from "@shared/routes";
 import { Layout } from "@/components/Layout";
 import { TeamColorCircleSmall } from "@/components/TeamColor";
-import { Loader2, UserPlus, Shirt, Trash } from "lucide-react";
+import { Gamepad2, Loader2, Radio, UserPlus, Shirt, Trash } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/api";
@@ -20,7 +21,14 @@ export default function TeamDetails() {
   const teamId = params ? parseInt(params.id) : 0;
   
   const { data: team, isLoading: teamLoading } = useTeam(teamId);
-  const { data: playersResp, isLoading: playersLoading } = useTeamPlayers(teamId);
+  const isVideogameTeam = team?.isVideogameTournamentTeam === true;
+  const { data: playersResp, isLoading: playersLoading } = useTeamPlayers(
+    teamId,
+    1,
+    10,
+    "",
+    { enabled: !!teamId && !isVideogameTeam },
+  );
   const players = playersResp;
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -30,10 +38,9 @@ export default function TeamDetails() {
   const [playerName, setPlayerName] = useState("");
   const [playerNumber, setPlayerNumber] = useState("");
   const { data: auth } = useAuth();
-  const isPublic = auth?.userRole === 'public';
   const isTeamOwner = (auth?.userRole === 'team_captain' || auth?.userRole === 'team') && auth?.teamId === teamId;
-  const canManagePlayers = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager' || isTeamOwner;
-  const canDeletePlayers = auth?.userRole === "admin" || isTeamOwner;
+  const canManagePlayers = !isVideogameTeam && (auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager' || isTeamOwner);
+  const canDeletePlayers = !isVideogameTeam && (auth?.userRole === "admin" || isTeamOwner);
 
   const handleAddPlayer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +61,7 @@ export default function TeamDetails() {
     }
   };
 
-  if (teamLoading || playersLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
+  if (teamLoading || (!isVideogameTeam && playersLoading)) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
   if (!team) return <div>Team not found</div>;
 
   return (
@@ -64,6 +71,45 @@ export default function TeamDetails() {
         <h1 className="text-xl font-display font-bold tracking-tight text-foreground">{team.name}</h1>
       </div>
     }>
+      {isVideogameTeam ? (
+        <div className="space-y-4">
+          <Card className="border-primary/20 bg-primary/5 p-5">
+            <div className="flex items-start gap-3">
+              <Gamepad2 className="mt-0.5 h-5 w-5 text-primary" />
+              <div className="space-y-3">
+                <Badge className="bg-primary/10 text-primary">
+                  Torneo de videojuego
+                </Badge>
+                <div>
+                  <h2 className="font-display text-lg font-bold">
+                    Equipo inscrito en torneo de videojuego
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Este perfil solo muestra la inscripción del equipo. Los equipos de videojuego no manejan jugadores ni alineación.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <div className="grid gap-3">
+            {team.videogameTournaments?.map((tournament) => (
+              <Card key={tournament.tournamentId} className="p-4">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Torneo
+                </p>
+                <h3 className="mt-1 font-semibold">{tournament.tournamentName}</h3>
+                {tournament.twitchChannel && (
+                  <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Radio className="h-4 w-4 text-primary" />
+                    Twitch: @{tournament.twitchChannel}
+                  </p>
+                )}
+              </Card>
+            ))}
+          </div>
+        </div>
+      ) : (
       <div className="space-y-6">
         {/* Roster Header */}
         <div className="flex items-center justify-between">
@@ -141,6 +187,7 @@ export default function TeamDetails() {
           )}
         </div>
       </div>
+      )}
     </Layout>
   );
 }

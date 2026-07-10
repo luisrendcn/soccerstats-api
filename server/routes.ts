@@ -44,10 +44,15 @@ const isTeamCaptainRole = (role: string) =>
 const MAX_HIGHLIGHT_MINUTE = Number(process.env.MATCH_MAX_MINUTE || 130);
 const MAX_HIGHLIGHT_THUMBNAIL_FILE_SIZE_BYTES =
   Number(process.env.HIGHLIGHT_THUMBNAIL_MAX_FILE_SIZE_MB || 5) * 1024 * 1024;
+const TWITCH_STREAM_GRACE_MS = 60 * 60 * 1000;
 const twitchTokenCache: { token: string | null; expiresAt: number } = {
   token: null,
   expiresAt: 0,
 };
+const twitchStreamState = new Map<
+  string,
+  { offlineSince: number | null; lastLiveAt: number | null }
+>();
 
 function normalizeTwitchChannel(value?: string | null) {
   const input = value?.trim();
@@ -99,6 +104,67 @@ async function getTwitchAppAccessToken() {
   return twitchTokenCache.token;
 }
 
+async function getTwitchStreamStatus(channel: string) {
+  const clientId = process.env.TWITCH_CLIENT_ID;
+  const token = await getTwitchAppAccessToken();
+  if (!clientId || !token) {
+    return {
+      configured: false,
+      channel,
+      isLive: null,
+      stream: null,
+      offlineSince: null,
+      graceExpiresAt: null,
+    };
+  }
+
+  const response = await fetch(
+    `https://api.twitch.tv/helix/streams?user_login=${encodeURIComponent(channel)}`,
+    {
+      headers: {
+        "Client-Id": clientId,
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+  if (!response.ok) return null;
+
+  const payload = (await response.json()) as { data?: any[] };
+  const stream = payload.data?.[0] ?? null;
+  const now = Date.now();
+  const previous = twitchStreamState.get(channel) || {
+    offlineSince: null,
+    lastLiveAt: null,
+  };
+
+  if (stream) {
+    twitchStreamState.set(channel, { offlineSince: null, lastLiveAt: now });
+    return {
+      configured: true,
+      channel,
+      isLive: true,
+      stream,
+      offlineSince: null,
+      graceExpiresAt: null,
+    };
+  }
+
+  const offlineSince = previous.offlineSince ?? now;
+  twitchStreamState.set(channel, {
+    offlineSince,
+    lastLiveAt: previous.lastLiveAt,
+  });
+
+  return {
+    configured: true,
+    channel,
+    isLive: false,
+    stream: null,
+    offlineSince: new Date(offlineSince).toISOString(),
+    graceExpiresAt: new Date(offlineSince + TWITCH_STREAM_GRACE_MS).toISOString(),
+  };
+}
+
 function normalizeMatchStreamFields<T extends Record<string, any>>(input: T): T {
   const next: Record<string, any> = { ...input };
   const channel = normalizeTwitchChannel(next.streamChannel || next.streamUrl);
@@ -131,6 +197,12 @@ function getTournamentTeamTwitchChannel(
     return { ok: false as const, message: "El canal de Twitch no es válido" };
   }
   return { ok: true as const, twitchChannel: channel || null };
+}
+
+function isVideogameTournamentTeam(team?: {
+  isVideogameTournamentTeam?: boolean | null;
+}) {
+  return team?.isVideogameTournamentTeam === true;
 }
 
 async function establishSession(
@@ -765,8 +837,10 @@ export async function registerRoutes(
   app.delete("/api/tournaments/:id", requireTournamentManager, async (req, res) => {
     try {
       const tournamentId = Number(req.params.id);
-      const tournament = await getManageableTournament(req, res, tournamentId);
-      if (!tournament) return;
+      const tournament = await storage.getTournamentById(tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ message: "Torneo no encontrado" });
+      }
 
       await storage.deleteTournament(tournamentId);
       res.json({ success: true });
@@ -874,6 +948,10 @@ export async function registerRoutes(
   // List players by team
   app.get(api.players.list.path, requirePermission("players", "read"), async (req, res) => {
     const teamId = Number(req.params.teamId);
+    const team = await storage.getTeam(teamId);
+    if (isVideogameTournamentTeam(team)) {
+      return res.json([]);
+    }
     const userRole = (req.session as any).userRole;
     if (isTeamCaptainRole(userRole)) {
       const myTeam = (req.session as any).teamId;
@@ -888,6 +966,13 @@ export async function registerRoutes(
   app.post(api.players.create.path, requirePermission("players", "create"), async (req, res) => {
     try {
       const input = api.players.create.input.parse(req.body);
+      const team = await storage.getTeam(input.teamId);
+      if (isVideogameTournamentTeam(team)) {
+        return res.status(400).json({
+          message:
+            "Los equipos de torneos de videojuego no manejan jugadores ni alineación",
+        });
+      }
       // ownership: team captain may only add to their own team
       const userRole = (req.session as any).userRole;
       if (isTeamCaptainRole(userRole)) {
@@ -916,37 +1001,11 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Canal de Twitch inválido" });
     }
 
-    const clientId = process.env.TWITCH_CLIENT_ID;
-    const token = await getTwitchAppAccessToken();
-    if (!clientId || !token) {
-      return res.json({
-        configured: false,
-        channel,
-        isLive: null,
-        stream: null,
-      });
-    }
-
-    const response = await fetch(
-      `https://api.twitch.tv/helix/streams?user_login=${encodeURIComponent(channel)}`,
-      {
-        headers: {
-          "Client-Id": clientId,
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    );
-    if (!response.ok) {
+    const streamStatus = await getTwitchStreamStatus(channel);
+    if (!streamStatus) {
       return res.status(502).json({ message: "No se pudo consultar Twitch" });
     }
-    const payload = (await response.json()) as { data?: any[] };
-    const stream = payload.data?.[0] ?? null;
-    res.json({
-      configured: true,
-      channel,
-      isLive: Boolean(stream),
-      stream,
-    });
+    res.json(streamStatus);
   });
 
   app.get(api.matches.list.path, requirePermission("matches", "read"), async (_req, res) => {

@@ -68,7 +68,13 @@ export function useCreateTeam() {
   });
 }
 
-export function useTeamPlayers(teamId: number, page = 1, limit = 10, search = "") {
+export function useTeamPlayers(
+  teamId: number,
+  page = 1,
+  limit = 10,
+  search = "",
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: [api.players.list.path, teamId, page, limit, search],
     queryFn: async () => {
@@ -81,7 +87,7 @@ export function useTeamPlayers(teamId: number, page = 1, limit = 10, search = ""
       if (!res.ok) throw new Error('Failed to fetch players');
       return api.players.list.responses[200].parse(await res.json());
     },
-    enabled: !!teamId,
+    enabled: options.enabled ?? !!teamId,
   });
 }
 

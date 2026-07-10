@@ -1,5 +1,26 @@
 import { z } from 'zod/v4';
-import { createMatchSchema, insertTeamSchema, insertPlayerSchema, insertMatchSchema, updateMatchSchema, insertGoalSchema, teams, players, matches, goals } from './schema';
+import {
+  createMatchSchema,
+  insertTeamSchema,
+  insertPlayerSchema,
+  insertMatchSchema,
+  updateMatchSchema,
+  insertGoalSchema,
+  teams,
+  players,
+  matches,
+  goals,
+  type Team,
+} from './schema';
+
+export type TeamResponse = Team & {
+  isVideogameTournamentTeam?: boolean;
+  videogameTournaments?: Array<{
+    tournamentId: number;
+    tournamentName: string;
+    twitchChannel: string | null;
+  }>;
+};
 
 export const errorSchemas = {
   validation: z.object({
@@ -20,14 +41,14 @@ export const api = {
       method: 'GET' as const,
       path: '/api/teams',
       responses: {
-        200: z.array(z.custom<typeof teams.$inferSelect>()),
+        200: z.array(z.custom<TeamResponse>()),
       },
     },
     get: {
       method: 'GET' as const,
       path: '/api/teams/:id',
       responses: {
-        200: z.custom<typeof teams.$inferSelect>(),
+        200: z.custom<TeamResponse>(),
         404: errorSchemas.notFound,
       },
     },

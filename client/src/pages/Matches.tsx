@@ -7,11 +7,14 @@ import { Layout } from "@/components/Layout";
 import { MatchCard } from "@/components/MatchCard";
 import { Loader2, Radio, Trash } from "lucide-react";
 import { useLanguage } from "@/lib/i18n.tsx";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
 import {
+  fetchTwitchStreamStatus,
   getTwitchChannelFromMatch,
+  getTwitchStreamQueryKey,
+  isTwitchStreamVisible,
   TwitchStreamCard,
 } from "@/components/TwitchStreamCard";
 
@@ -30,8 +33,6 @@ export default function Matches() {
   const canDeleteMatches = auth?.userRole === "admin";
   const isLoading = matchesLoading || teamsLoading;
 
-  if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
-
   const enrichedMatches = matches
     ?.map((match) => ({
       ...match,
@@ -42,13 +43,29 @@ export default function Matches() {
     .sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
-  const liveMatches = enrichedMatches?.filter(
+
+  const streamMatches = enrichedMatches?.filter(
     (match) => Boolean(getTwitchChannelFromMatch(match)),
+  ) || [];
+  const streamStatusQueries = useQueries({
+    queries: streamMatches.map((match) => {
+      const channel = getTwitchChannelFromMatch(match)!;
+      return {
+        queryKey: getTwitchStreamQueryKey(channel),
+        queryFn: () => fetchTwitchStreamStatus(channel),
+        staleTime: 60_000,
+        refetchInterval: 60_000,
+        retry: false,
+      };
+    }),
+  });
+  const liveMatches = streamMatches.filter((match, index) =>
+    isTwitchStreamVisible(match, streamStatusQueries[index]?.data),
   );
 
   const filteredMatches = enrichedMatches?.filter((m: any) => {
     if (filter === 'live') {
-      return Boolean(getTwitchChannelFromMatch(m));
+      return liveMatches.some((match) => match.id === m.id);
     }
     if (filter === 'all') return true;
     return m.status === filter;
@@ -60,6 +77,8 @@ export default function Matches() {
     scheduled: t('scheduled'),
     finished: t('finished'),
   };
+
+  if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
     <Layout title={t('matchSchedule')}>
@@ -75,10 +94,10 @@ export default function Matches() {
             </p>
           </div>
           <span className="rounded-full bg-background px-3 py-1 text-xs font-bold text-primary shadow-sm">
-            {liveMatches?.length || 0}
+            {liveMatches.length}
           </span>
         </div>
-        {liveMatches?.length ? (
+        {liveMatches.length ? (
           <div className="grid gap-4 md:grid-cols-2">
             {liveMatches.slice(0, 2).map((match: any) => (
               <TwitchStreamCard key={match.id} match={match} compact />

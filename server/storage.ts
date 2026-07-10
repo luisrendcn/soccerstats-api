@@ -26,17 +26,28 @@ import {
   type InsertTournament,
   type TournamentTeam,
 } from "@shared/schema";
-import { eq, desc, isNull, and, or } from "drizzle-orm";
+import { eq, desc, isNull, and, or, inArray, ne } from "drizzle-orm";
 import { calculateStandings, type Standing } from "./standings";
 
 /* =======================
    TYPES
 ======================= */
 
+export type TeamVideogameTournament = {
+  tournamentId: number;
+  tournamentName: string;
+  twitchChannel: string | null;
+};
+
+export type TeamWithTournamentMeta = Team & {
+  isVideogameTournamentTeam: boolean;
+  videogameTournaments: TeamVideogameTournament[];
+};
+
 export interface IStorage {
   // Teams
-  getTeams(): Promise<Team[]>;
-  getTeam(id: number): Promise<Team | undefined>;
+  getTeams(): Promise<TeamWithTournamentMeta[]>;
+  getTeam(id: number): Promise<TeamWithTournamentMeta | undefined>;
   createTeam(team: InsertTeam): Promise<Team>;
 
   // Players
@@ -115,16 +126,63 @@ export class DatabaseStorage implements IStorage {
      TEAMS
   ======================= */
 
-  async getTeams(): Promise<Team[]> {
-    return db.select().from(teams).where(isNull(teams.deletedAt));
+  private async attachTeamTournamentMeta<T extends Team>(
+    teamList: T[],
+  ): Promise<Array<T & TeamWithTournamentMeta>> {
+    if (teamList.length === 0) return [];
+
+    const teamIds = teamList.map((team) => team.id);
+    const videogameRows = await db
+      .select({
+        teamId: tournamentTeams.teamId,
+        tournamentId: tournaments.id,
+        tournamentName: tournaments.name,
+        twitchChannel: tournamentTeams.twitchChannel,
+      })
+      .from(tournamentTeams)
+      .innerJoin(tournaments, eq(tournamentTeams.tournamentId, tournaments.id))
+      .where(
+        and(
+          inArray(tournamentTeams.teamId, teamIds),
+          eq(tournaments.tournamentType, "videogame"),
+          isNull(tournaments.deletedAt),
+        ),
+      );
+
+    const tournamentsByTeam = new Map<number, TeamVideogameTournament[]>();
+    for (const row of videogameRows) {
+      const current = tournamentsByTeam.get(row.teamId) || [];
+      current.push({
+        tournamentId: row.tournamentId,
+        tournamentName: row.tournamentName,
+        twitchChannel: row.twitchChannel ?? null,
+      });
+      tournamentsByTeam.set(row.teamId, current);
+    }
+
+    return teamList.map((team) => {
+      const videogameTournaments = tournamentsByTeam.get(team.id) || [];
+      return {
+        ...team,
+        isVideogameTournamentTeam: videogameTournaments.length > 0,
+        videogameTournaments,
+      };
+    });
   }
 
-  async getTeam(id: number): Promise<Team | undefined> {
+  async getTeams(): Promise<TeamWithTournamentMeta[]> {
+    const teamList = await db.select().from(teams).where(isNull(teams.deletedAt));
+    return this.attachTeamTournamentMeta(teamList);
+  }
+
+  async getTeam(id: number): Promise<TeamWithTournamentMeta | undefined> {
     const [team] = await db
       .select()
       .from(teams)
       .where(and(eq(teams.id, id), isNull(teams.deletedAt)));
-    return team;
+    if (!team) return undefined;
+    const [teamWithMeta] = await this.attachTeamTournamentMeta([team]);
+    return teamWithMeta;
   }
 
   async createTeam(team: InsertTeam): Promise<Team> {
@@ -486,10 +544,60 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTournament(id: number): Promise<void> {
-    await db
-      .update(tournaments)
-      .set({ deletedAt: new Date() })
-      .where(eq(tournaments.id, id));
+    await db.transaction(async (tx) => {
+      const deletedAt = new Date();
+      const tournamentTeamRows = await tx
+        .select({ teamId: tournamentTeams.teamId })
+        .from(tournamentTeams)
+        .where(eq(tournamentTeams.tournamentId, id));
+      const tournamentTeamIds = tournamentTeamRows.map((row) => row.teamId);
+
+      await tx
+        .update(tournaments)
+        .set({ deletedAt, updatedAt: deletedAt })
+        .where(eq(tournaments.id, id));
+
+      await tx
+        .update(matches)
+        .set({ deletedAt })
+        .where(and(eq(matches.tournamentId, id), isNull(matches.deletedAt)));
+
+      if (tournamentTeamIds.length > 0) {
+        const otherActiveTournamentRows = await tx
+          .select({ teamId: tournamentTeams.teamId })
+          .from(tournamentTeams)
+          .innerJoin(tournaments, eq(tournamentTeams.tournamentId, tournaments.id))
+          .where(
+            and(
+              inArray(tournamentTeams.teamId, tournamentTeamIds),
+              ne(tournamentTeams.tournamentId, id),
+              isNull(tournaments.deletedAt),
+            ),
+          );
+        const teamIdsInOtherActiveTournaments = new Set(
+          otherActiveTournamentRows.map((row) => row.teamId),
+        );
+        const teamIdsToDelete = tournamentTeamIds.filter(
+          (teamId) => !teamIdsInOtherActiveTournaments.has(teamId),
+        );
+
+        if (teamIdsToDelete.length > 0) {
+          await tx
+            .update(teams)
+            .set({ deletedAt })
+            .where(and(inArray(teams.id, teamIdsToDelete), isNull(teams.deletedAt)));
+
+          await tx
+            .update(players)
+            .set({ deletedAt })
+            .where(and(inArray(players.teamId, teamIdsToDelete), isNull(players.deletedAt)));
+        }
+      }
+
+      await tx
+        .delete(tournamentTeams)
+        .where(eq(tournamentTeams.tournamentId, id));
+    });
   }
 
   async addTeamToTournament(

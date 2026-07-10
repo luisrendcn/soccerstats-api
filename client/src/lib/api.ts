@@ -5,9 +5,8 @@ export const API_BASE = (() => {
   const envBase = import.meta.env.VITE_API_BASE?.replace(/\/$/, "");
   if (Capacitor.isNativePlatform()) {
     if (!envBase) {
-      throw new Error("VITE_API_BASE is required for native builds");
+      console.error("VITE_API_BASE is required for native API requests");
     }
-    return envBase;
   }
   return envBase || "";
 })();

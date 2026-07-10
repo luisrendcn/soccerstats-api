@@ -152,7 +152,7 @@ export default function Tournaments() {
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminar Torneo</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro que deseas eliminar este torneo? No se puede deshacer esta acción.
+              ¿Estás seguro que deseas eliminar este torneo? También se eliminarán sus partidos y los equipos de este torneo que no estén inscritos en otro torneo activo. No se puede deshacer esta acción.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex gap-2">

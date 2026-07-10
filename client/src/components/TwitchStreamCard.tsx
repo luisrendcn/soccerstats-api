@@ -12,6 +12,14 @@ type MatchWithStream = Match & {
   tournament?: Tournament;
 };
 
+export type TwitchStreamStatus = {
+  configured: boolean;
+  isLive: boolean | null;
+  stream: { title?: string; viewer_count?: number } | null;
+  offlineSince?: string | null;
+  graceExpiresAt?: string | null;
+};
+
 function normalizeTwitchChannel(value?: string | null) {
   const input = value?.trim();
   if (!input) return null;
@@ -34,6 +42,46 @@ export function getTwitchChannelFromMatch(match: MatchWithStream) {
   return normalizeTwitchChannel(match.streamChannel || match.streamUrl);
 }
 
+export function getTwitchStreamQueryKey(channel: string | null) {
+  return ["twitch-stream", channel];
+}
+
+export async function fetchTwitchStreamStatus(channel: string) {
+  const res = await apiFetch(`/api/twitch/streams/${channel}`);
+  if (!res.ok) throw new Error("No se pudo consultar Twitch");
+  return res.json() as Promise<TwitchStreamStatus>;
+}
+
+export function isTwitchStreamVisible(
+  match: MatchWithStream,
+  streamStatus?: TwitchStreamStatus,
+) {
+  if (!getTwitchChannelFromMatch(match)) return false;
+
+  if (!streamStatus) {
+    return match.status === "live";
+  }
+
+  if (streamStatus.configured === false) {
+    return match.status === "live";
+  }
+
+  if (streamStatus.isLive === true) {
+    return true;
+  }
+
+  if (!streamStatus.graceExpiresAt) {
+    return false;
+  }
+
+  const graceExpiresAt = new Date(streamStatus.graceExpiresAt).getTime();
+  return (
+    Number.isFinite(graceExpiresAt) &&
+    Date.now() <= graceExpiresAt &&
+    (match.status === "live" || match.status === "finished")
+  );
+}
+
 export function TwitchStreamCard({
   match,
   compact = false,
@@ -43,26 +91,24 @@ export function TwitchStreamCard({
 }) {
   const channel = getTwitchChannelFromMatch(match);
   const { data: streamStatus } = useQuery({
-    queryKey: ["twitch-stream", channel],
-    queryFn: async () => {
-      const res = await apiFetch(`/api/twitch/streams/${channel}`);
-      if (!res.ok) throw new Error("No se pudo consultar Twitch");
-      return res.json() as Promise<{
-        configured: boolean;
-        isLive: boolean | null;
-        stream: { title?: string; viewer_count?: number } | null;
-      }>;
-    },
+    queryKey: getTwitchStreamQueryKey(channel),
+    queryFn: () => fetchTwitchStreamStatus(channel!),
     enabled: Boolean(channel),
     staleTime: 60_000,
+    refetchInterval: 60_000,
     retry: false,
   });
 
   if (!channel) return null;
+  if (!isTwitchStreamVisible(match, streamStatus)) return null;
 
   const parent = encodeURIComponent(getTwitchParent());
   const embedUrl = `https://player.twitch.tv/?channel=${encodeURIComponent(channel)}&parent=${parent}`;
-  const isLive = match.status === "live" || streamStatus?.isLive === true;
+  const isLive =
+    streamStatus?.isLive === true ||
+    (streamStatus?.configured !== true && match.status === "live");
+  const isRecentlyOffline =
+    streamStatus?.configured === true && streamStatus.isLive === false;
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -80,11 +126,11 @@ export function TwitchStreamCard({
           </p>
         </div>
         <Badge className={isLive ? "bg-red-100 text-red-700" : "bg-primary/10 text-primary"}>
-          {isLive ? "En vivo" : "Directo"}
+          {isLive ? "En vivo" : isRecentlyOffline ? "Finalizado" : "Directo"}
         </Badge>
       </div>
 
-      {!compact && (
+      {!compact && isLive && (
         <div className="aspect-video w-full bg-black">
           <iframe
             className="h-full w-full"
@@ -97,6 +143,11 @@ export function TwitchStreamCard({
       )}
 
       <div className="space-y-3 p-4">
+        {isRecentlyOffline && (
+          <p className="text-sm text-muted-foreground">
+            La transmisión terminó recientemente. Se ocultará del panel máximo 1 hora después de detectarse offline.
+          </p>
+        )}
         {streamStatus?.stream?.title && (
           <p className="text-sm font-medium">{streamStatus.stream.title}</p>
         )}

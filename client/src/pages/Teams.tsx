@@ -5,9 +5,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { TeamColorGradientBackground, TeamColorCircle } from "@/components/TeamColor";
 import { Link } from "wouter";
-import { Loader2, Users, Trash } from "lucide-react";
+import { Gamepad2, Loader2, Users, Trash } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
@@ -41,8 +42,20 @@ export default function Teams() {
                 
                 <div>
                   <TeamColorCircle color={team.color} />
-                  <h3 className="font-display font-bold text-xl leading-tight mb-1">{team.name}</h3>
-                  <p className="text-sm text-muted-foreground">{t('tapToViewRoster')}</p>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <h3 className="font-display font-bold text-xl leading-tight">{team.name}</h3>
+                    {team.isVideogameTournamentTeam && (
+                      <Badge className="bg-primary/10 text-primary">
+                        <Gamepad2 className="mr-1 h-3 w-3" />
+                        Torneo de videojuego
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {team.isVideogameTournamentTeam
+                      ? "Equipo inscrito en torneo de videojuego"
+                      : t('tapToViewRoster')}
+                  </p>
                 </div>
                 
                 <div className="flex justify-end mt-4">
