@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { Link } from "wouter";
 import { Team, Match, Tournament } from "@shared/schema";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 type MatchWithTeams = Match & {
   homeTeam?: Team;
@@ -19,8 +20,11 @@ export function MatchCard({
   showDate = true,
   showTournament = false,
 }: MatchCardProps) {
+  const { t } = useLanguage();
   const isFinished = match.status === "finished";
   const isLive = match.status === "live";
+  const statusLabel =
+    isLive ? t("live") : match.status === "finished" ? t("finished") : t("scheduled");
 
   return (
     <Link href={`/matches/${match.id}`}>
@@ -35,12 +39,12 @@ export function MatchCard({
                 <span>{format(new Date(match.date), "EEE, MMM d • HH:mm")}</span>
                 {showTournament && (
                   <span className="truncate rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                    {match.tournament?.name || "Sin torneo asignado"}
+                    {match.tournament?.name || t("assignedTournamentMissing")}
                   </span>
                 )}
               </div>
               <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isFinished ? 'bg-muted text-muted-foreground' : isLive ? 'bg-red-100 text-red-700' : 'bg-primary/10 text-primary'}`}>
-                {isLive ? "en vivo" : match.status}
+                {statusLabel}
               </span>
             </div>
           )}
@@ -49,7 +53,7 @@ export function MatchCard({
             {/* Home Team */}
             <div className="flex-1 flex flex-col items-start gap-1">
               <span className="font-display font-bold text-lg leading-tight truncate w-full" style={{ color: match.homeTeam?.color || 'inherit' }}>
-                {match.homeTeam?.name || "Unknown"}
+                {match.homeTeam?.name || t("unknown")}
               </span>
             </div>
 
@@ -67,7 +71,7 @@ export function MatchCard({
             {/* Away Team */}
             <div className="flex-1 flex flex-col items-end gap-1 text-right">
               <span className="font-display font-bold text-lg leading-tight truncate w-full" style={{ color: match.awayTeam?.color || 'inherit' }}>
-                {match.awayTeam?.name || "Unknown"}
+                {match.awayTeam?.name || t("unknown")}
               </span>
             </div>
           </div>

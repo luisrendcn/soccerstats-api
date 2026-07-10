@@ -32,7 +32,7 @@ export default function Teams() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-24">
         {/* Team Cards */}
         <div className="flex items-center gap-2 mb-4">
-          <Input placeholder="Search teams..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="flex-1" />
+          <Input placeholder={t("searchTeams")} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="flex-1" />
         </div>
         {teams?.map((team: any) => (
           <div key={team.id} className="relative">
@@ -47,13 +47,13 @@ export default function Teams() {
                     {team.isVideogameTournamentTeam && (
                       <Badge className="bg-primary/10 text-primary">
                         <Gamepad2 className="mr-1 h-3 w-3" />
-                        Torneo de videojuego
+                        {t("videogameTournament")}
                       </Badge>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {team.isVideogameTournamentTeam
-                      ? "Equipo inscrito en torneo de videojuego"
+                      ? t("videogameTeamSummary")
                       : t('tapToViewRoster')}
                   </p>
                 </div>
@@ -64,7 +64,7 @@ export default function Teams() {
               </div>
             </Link>
             {auth?.userRole === 'admin' && (
-              <button title={`Delete ${team.name}`} className="absolute top-2 right-2 p-2 rounded-md bg-red-50 hover:bg-red-100" onClick={async (e) => { e.preventDefault(); if (!confirm(`Delete ${team.name}?`)) return; const response = await apiFetch(`/api/teams/${team.id}`, { method: "DELETE" }); if (!response.ok) throw new Error("Failed to delete team"); await refreshAppData(queryClient); }}>
+              <button title={t("deleteTeamConfirm", { name: team.name })} className="absolute top-2 right-2 p-2 rounded-md bg-red-50 hover:bg-red-100" onClick={async (e) => { e.preventDefault(); if (!confirm(t("deleteTeamConfirm", { name: team.name }))) return; const response = await apiFetch(`/api/teams/${team.id}`, { method: "DELETE" }); if (!response.ok) throw new Error(t("deleteTeamFailed")); await refreshAppData(queryClient); }}>
                 <Trash className="w-4 h-4 text-red-600" />
               </button>
             )}
@@ -73,9 +73,9 @@ export default function Teams() {
 
         {/* Pagination */}
         <div className="flex justify-between items-center mt-4">
-          <Button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Previous</Button>
-          <div className="text-sm text-muted-foreground">Page {page} of {totalPages}</div>
-          <Button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
+          <Button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>{t("previous")}</Button>
+          <div className="text-sm text-muted-foreground">{t("pageOf", { page, totalPages })}</div>
+          <Button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>{t("next")}</Button>
         </div>
       </div>
     </Layout>

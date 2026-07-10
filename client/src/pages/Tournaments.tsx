@@ -18,15 +18,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
+import { useLanguage } from "@/lib/i18n.tsx";
 
-const statusLabels: Record<string, { label: string; variant: any }> = {
-  draft: { label: "Borrador", variant: "secondary" },
-  active: { label: "Activo", variant: "default" },
-  finished: { label: "Finalizado", variant: "outline" },
+const statusVariants: Record<string, any> = {
+  draft: "secondary",
+  active: "default",
+  finished: "outline",
 };
 
 export default function Tournaments() {
   const [, setLocation] = useLocation();
+  const { t, language } = useLanguage();
   const { data: tournaments, isLoading } = useTournaments();
   const { data: auth } = useAuth();
   const isPublic = auth?.userRole === 'public';
@@ -38,13 +40,13 @@ export default function Tournaments() {
   const handleDelete = async (id: number) => {
     try {
       await deleteTournament.mutateAsync(id);
-      toast({ title: "✓ Torneo eliminado" });
+      toast({ title: `✓ ${t("tournamentDeleted")}` });
       setDeletingId(null);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -58,24 +60,24 @@ export default function Tournaments() {
   }
 
   return (
-    <Layout title="Torneos">
+    <Layout title={t("tournamentListTitle")}>
       <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Torneos</h1>
+        <h1 className="text-3xl font-bold">{t("tournamentListTitle")}</h1>
         {canManageTournaments && (
           <Button onClick={() => setLocation("/tournaments/new")} size="sm">
             <Plus className="w-4 h-4 mr-2" />
-            Nuevo Torneo
+            {t("newTournament")}
           </Button>
         )}
       </div>
 
       {!tournaments || tournaments.length === 0 ? (
           <Card className="p-8 text-center">
-            <p className="text-muted-foreground mb-4">No hay torneos creados aún</p>
+            <p className="text-muted-foreground mb-4">{t("noTournamentsYet")}</p>
             {canManageTournaments && (
               <Button onClick={() => setLocation("/tournaments/new")}>
-                Crear Primer Torneo
+                {t("createFirstTournament")}
               </Button>
             )}
           </Card>
@@ -91,13 +93,17 @@ export default function Tournaments() {
                   )}
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <Badge variant={statusLabels[tournament.status]?.variant || "secondary"}>
-                    {statusLabels[tournament.status]?.label || tournament.status}
+                  <Badge variant={statusVariants[tournament.status] || "secondary"}>
+                    {{
+                      draft: t("draft"),
+                      active: t("active"),
+                      finished: t("finished"),
+                    }[tournament.status] || tournament.status}
                   </Badge>
                   {tournament.tournamentType === "videogame" && (
                     <Badge className="bg-primary/10 text-primary">
                       <Gamepad2 className="mr-1 h-3 w-3" />
-                      Videojuego
+                      {t("videogame")}
                     </Badge>
                   )}
                 </div>
@@ -107,13 +113,13 @@ export default function Tournaments() {
                 {tournament.startDate && (
                   <div className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
-                    {new Date(tournament.startDate).toLocaleDateString("es-ES")}
+                    {new Date(tournament.startDate).toLocaleDateString(language === "es" ? "es-ES" : "en-US")}
                   </div>
                 )}
                 {tournament.endDate && (
                   <div className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
-                    {new Date(tournament.endDate).toLocaleDateString("es-ES")}
+                    {new Date(tournament.endDate).toLocaleDateString(language === "es" ? "es-ES" : "en-US")}
                   </div>
                 )}
               </div>
@@ -127,7 +133,7 @@ export default function Tournaments() {
                     setLocation(`/tournaments/${tournament.id}`);
                   }}
                 >
-                  Ver Detalles
+                  {t("viewDetails")}
                 </Button>
                 {canManageTournaments && (
                   <Button
@@ -150,18 +156,18 @@ export default function Tournaments() {
       <AlertDialog open={deletingId !== null} onOpenChange={(open) => !open && setDeletingId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Eliminar Torneo</AlertDialogTitle>
+            <AlertDialogTitle>{t("deleteTournamentTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro que deseas eliminar este torneo? También se eliminarán sus partidos y los equipos de este torneo que no estén inscritos en otro torneo activo. No se puede deshacer esta acción.
+              {t("deleteTournamentDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex gap-2">
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deletingId && handleDelete(deletingId)}
               className="bg-red-600 hover:bg-red-700"
             >
-              Eliminar
+              {t("delete")}
             </AlertDialogAction>
           </div>
         </AlertDialogContent>

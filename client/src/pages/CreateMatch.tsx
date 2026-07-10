@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 interface CreateMatchProps {
   tournamentId: number;
@@ -17,6 +18,7 @@ interface CreateMatchProps {
 export default function CreateMatch({ tournamentId }: CreateMatchProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const { data: tournament, isLoading: tournamentLoading } = useTournament(tournamentId);
   const createMatch = useCreateMatch();
 
@@ -39,12 +41,12 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!homeTeamId || !awayTeamId || !date || !time) {
-      toast({ variant: "destructive", title: "Missing fields", description: "Please fill in all required fields." });
+      toast({ variant: "destructive", title: t("missingFields"), description: t("fillRequiredFields") });
       return;
     }
 
     if (homeTeamId === awayTeamId) {
-      toast({ variant: "destructive", title: "Invalid Matchup", description: "Home and Away teams must be different." });
+      toast({ variant: "destructive", title: t("invalidMatchup"), description: t("differentTeamsRequired") });
       return;
     }
     if (isVideogameTournament) {
@@ -53,17 +55,16 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
       if (teamsWithoutTwitch.length > 0) {
         toast({
           variant: "destructive",
-          title: "Falta canal de Twitch",
-          description:
-            "Ambos participantes deben tener canal de Twitch inscrito en el torneo.",
+          title: t("missingTwitchChannel"),
+          description: t("bothTeamsNeedTwitch"),
         });
         return;
       }
       if (!streamChannel) {
         toast({
           variant: "destructive",
-          title: "Canal requerido",
-          description: "Selecciona el canal que transmitirá este partido.",
+          title: t("channelRequired"),
+          description: t("selectBroadcastChannel"),
         });
         return;
       }
@@ -78,34 +79,34 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
         homeTeamId: parseInt(homeTeamId),
         awayTeamId: parseInt(awayTeamId),
         date: dateTime,
-        location: locationName || "Main Field",
+        location: locationName || t("mainField"),
         status,
         streamPlatform: isVideogameTournament ? "twitch" : null,
         streamChannel: isVideogameTournament ? streamChannel : null,
         streamUrl: isVideogameTournament ? streamChannel : null,
       });
       
-      toast({ title: "Match Scheduled!", description: "The match has been successfully created." });
+      toast({ title: t("matchScheduled"), description: t("matchCreatedSuccess") });
       setLocation(`/tournaments/${tournamentId}`);
     } catch (err) {
-      toast({ variant: "destructive", title: "Error", description: (err as Error).message });
+      toast({ variant: "destructive", title: t("error"), description: t("unexpectedError") });
     }
   };
 
   if (tournamentLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
-    <Layout title={`Nuevo Partido - ${tournament?.name || "Torneo"}`} showBack>
+    <Layout title={t("newMatchTitle", { tournament: tournament?.name || t("tournament") })} showBack>
       <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto">
         <div className="bg-card p-6 rounded-xl border border-border shadow-sm space-y-4">
           <div className="space-y-1">
-            <Label>Torneo</Label>
+            <Label>{t("tournamentLabel")}</Label>
             <p className="font-semibold">{tournament?.name}</p>
           </div>
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Home Team</Label>
+              <Label>{t("homeTeam")}</Label>
               <Select
                 value={homeTeamId}
                 onValueChange={(value) => {
@@ -114,7 +115,7 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select" />
+                  <SelectValue placeholder={t("select")} />
                 </SelectTrigger>
                 <SelectContent>
                   {tournamentTeams?.map((team) => (
@@ -125,7 +126,7 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Away Team</Label>
+              <Label>{t("awayTeam")}</Label>
               <Select
                 value={awayTeamId}
                 onValueChange={(value) => {
@@ -134,7 +135,7 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select" />
+                  <SelectValue placeholder={t("select")} />
                 </SelectTrigger>
                 <SelectContent>
                   {tournamentTeams?.map((team) => (
@@ -146,57 +147,57 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
           </div>
 
           {tournamentTeamsLoading && (
-            <p className="text-sm text-muted-foreground">Cargando equipos del torneo...</p>
+            <p className="text-sm text-muted-foreground">{t("loadingTournamentTeams")}</p>
           )}
           {!tournamentTeamsLoading && tournamentTeams?.length === 0 && (
             <p className="text-sm text-destructive">
-              Este torneo todavía no tiene equipos inscritos.
+              {t("tournamentHasNoTeams")}
             </p>
           )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Date</Label>
+              <Label>{t("date")}</Label>
               <Input type="date" value={date} onChange={e => setDate(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label>Time</Label>
+              <Label>{t("time")}</Label>
               <Input type="time" value={time} onChange={e => setTime(e.target.value)} />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Location</Label>
+            <Label>{t("location")}</Label>
             <Input 
-              placeholder="Ej. Estadio, sala o lobby del juego"
+              placeholder={t("locationPlaceholder")}
               value={locationName} 
               onChange={e => setLocationName(e.target.value)} 
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Estado inicial</Label>
+            <Label>{t("initialStatus")}</Label>
             <Select value={status} onValueChange={(value) => setStatus(value as "scheduled" | "live")}>
               <SelectTrigger>
-                <SelectValue placeholder="Estado" />
+                <SelectValue placeholder={t("status")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="scheduled">Programado</SelectItem>
-                <SelectItem value="live">En vivo</SelectItem>
+                <SelectItem value="scheduled">{t("scheduled")}</SelectItem>
+                <SelectItem value="live">{t("live")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {isVideogameTournament && (
             <div className="space-y-2">
-              <Label>Canal que transmitirá</Label>
+              <Label>{t("broadcastChannel")}</Label>
               <Select
                 value={streamChannel}
                 onValueChange={setStreamChannel}
                 disabled={!homeTeamId || !awayTeamId}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecciona canal de Twitch" />
+                  <SelectValue placeholder={t("selectTwitchChannel")} />
                 </SelectTrigger>
                 <SelectContent>
                   {selectedMatchTeams?.map((team) => (
@@ -205,20 +206,20 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
                       value={team.twitchChannel || String(team.id)}
                       disabled={!team.twitchChannel}
                     >
-                      {team.name} - @{team.twitchChannel || "sin canal"}
+                      {team.name} - @{team.twitchChannel || t("noChannel")}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Los canales vienen de los participantes inscritos en este torneo de videojuego.
+                {t("channelsFromVideogameParticipants")}
               </p>
             </div>
           )}
 
           {!isVideogameTournament && (
             <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-              Las transmisiones de Twitch se habilitan creando un torneo de videojuego.
+              {t("twitchEnabledForVideogameTournaments")}
             </p>
           )}
         </div>
@@ -233,7 +234,7 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
             (isVideogameTournament && !streamChannel)
           }
         >
-          {createMatch.isPending ? "Scheduling..." : "Create Match"}
+          {createMatch.isPending ? t("scheduling") : t("createMatch")}
         </Button>
       </form>
     </Layout>

@@ -27,22 +27,23 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import type { MatchHighlight } from "@shared/schema";
+import { useLanguage } from "@/lib/i18n.tsx";
 
-const highlightTypeLabels: Record<string, string> = {
-  goal: "Gol",
-  save: "Atajada",
-  assist: "Asistencia",
-  foul: "Falta",
-  penalty: "Penalti",
-  free_kick: "Tiro libre",
-  celebration: "Celebración",
-  other: "Otra",
-};
+const highlightTypeKeys = {
+  goal: "highlightGoal",
+  save: "highlightSave",
+  assist: "highlightAssist",
+  foul: "highlightFoul",
+  penalty: "highlightPenalty",
+  free_kick: "highlightFreeKick",
+  celebration: "highlightCelebration",
+  other: "highlightOther",
+} as const;
 
-const statusLabels: Record<string, { label: string; className: string }> = {
-  pending: { label: "Pendiente", className: "bg-amber-100 text-amber-800" },
-  approved: { label: "Aprobado", className: "bg-green-100 text-green-800" },
-  rejected: { label: "Rechazado", className: "bg-red-100 text-red-800" },
+const highlightStatusClasses: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-800",
+  approved: "bg-green-100 text-green-800",
+  rejected: "bg-red-100 text-red-800",
 };
 
 function wrapScoreNumber(value: number) {
@@ -181,6 +182,7 @@ export default function MatchDetails() {
   const updateHighlight = useUpdateMatchHighlight(matchId);
   const deleteHighlight = useDeleteMatchHighlight(matchId);
   const { toast } = useToast();
+  const { t } = useLanguage();
   const { data: auth } = useAuth();
   const canModifyMatch = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager' || auth?.userRole === 'referee';
   const canReviewHighlights =
@@ -284,8 +286,8 @@ export default function MatchDetails() {
         }
         toast({
           variant: "destructive",
-          title: "Error",
-          description: "No se pudo actualizar el marcador",
+          title: t("error"),
+          description: t("scoreUpdateFailed"),
         });
       }
     }, 350);
@@ -316,9 +318,9 @@ export default function MatchDetails() {
     if (!match) return;
     try {
       await updateMatch.mutateAsync({ id: match.id, status: "finished" });
-      toast({ title: "Match Finished", description: "Final score has been recorded." });
+      toast({ title: t("matchFinished"), description: t("finalScoreRecorded") });
     } catch (err) {
-      toast({ variant: "destructive", title: "Error", description: "Failed to finish match" });
+      toast({ variant: "destructive", title: t("error"), description: t("failedToFinishMatch") });
     }
   };
 
@@ -327,14 +329,14 @@ export default function MatchDetails() {
     try {
       await updateMatch.mutateAsync({ id: match.id, status: "live" });
       toast({
-        title: "Partido en vivo",
-        description: "El partido quedó marcado como transmisión en vivo.",
+        title: t("matchMarkedLive"),
+        description: t("matchMarkedLiveDescription"),
       });
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "No se pudo marcar el partido como en vivo",
+        title: t("error"),
+        description: t("failedToMarkLive"),
       });
     }
   };
@@ -351,12 +353,12 @@ export default function MatchDetails() {
         minute: parseInt(goalMinute)
       });
 
-      toast({ title: "Detalle guardado", description: "El gol quedó registrado en los eventos." });
+      toast({ title: t("goalDetailSaved"), description: t("goalRecordedDescription") });
       setIsGoalDialogOpen(false);
       setGoalMinute("");
       setSelectedPlayerId("unknown");
     } catch (err) {
-      toast({ variant: "destructive", title: "Error", description: (err as Error).message });
+      toast({ variant: "destructive", title: t("error"), description: t("unexpectedError") });
     }
   };
 
@@ -388,10 +390,10 @@ export default function MatchDetails() {
   const uploadHighlightThumbnail = async (file: File) => {
     const signature = await thumbnailSignature.mutateAsync();
     if (file.size > signature.maxFileSizeBytes) {
-      throw new Error("La miniatura supera el tamaño máximo permitido");
+      throw new Error(t("thumbnailTooLarge"));
     }
     if (!file.type.startsWith("image/")) {
-      throw new Error("La miniatura debe ser una imagen");
+      throw new Error(t("thumbnailMustBeImage"));
     }
 
     const formData = new FormData();
@@ -407,7 +409,7 @@ export default function MatchDetails() {
     );
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.error?.message || "No se pudo subir la miniatura");
+      throw new Error(payload.error?.message || t("thumbnailUploadError"));
     }
 
     return {
@@ -422,7 +424,7 @@ export default function MatchDetails() {
 
     try {
       if (!getYouTubeEmbedUrl(highlightVideoUrl.trim())) {
-        throw new Error("Pega un enlace válido de YouTube");
+        throw new Error(t("validYoutubeRequired"));
       }
 
       const basePayload = {
@@ -443,9 +445,8 @@ export default function MatchDetails() {
         } catch (thumbnailError) {
           toast({
             variant: "destructive",
-            title: "Miniatura no subida",
-            description:
-              "La jugada se guardará sin miniatura. Revisa las variables de Cloudinary en Render.",
+            title: t("thumbnailUploadFailed"),
+            description: t("thumbnailUploadFailedDescription"),
           });
           console.warn("Highlight thumbnail upload failed", thumbnailError);
         }
@@ -457,7 +458,7 @@ export default function MatchDetails() {
           ...basePayload,
           ...thumbnailPayload,
         });
-        toast({ title: "Jugada actualizada" });
+        toast({ title: t("highlightUpdated") });
       } else {
         await createHighlight.mutateAsync({
           ...basePayload,
@@ -465,8 +466,8 @@ export default function MatchDetails() {
           ...thumbnailPayload,
         });
         toast({
-          title: "Jugada enviada",
-          description: "Quedó pendiente de aprobación.",
+          title: t("highlightSubmitted"),
+          description: t("highlightSubmittedDescription"),
         });
       }
 
@@ -475,8 +476,8 @@ export default function MatchDetails() {
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (err as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -488,27 +489,27 @@ export default function MatchDetails() {
     try {
       await updateHighlight.mutateAsync({ id: highlight.id, status });
       toast({
-        title: status === "approved" ? "Jugada aprobada" : "Jugada rechazada",
+        title: status === "approved" ? t("highlightApproved") : t("highlightRejected"),
       });
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (err as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
 
   const handleDeleteHighlight = async (highlight: MatchHighlight) => {
-    if (!confirm(`¿Eliminar la jugada "${highlight.title}"?`)) return;
+    if (!confirm(t("deleteHighlightConfirm", { title: highlight.title }))) return;
     try {
       await deleteHighlight.mutateAsync(highlight.id);
-      toast({ title: "Jugada eliminada" });
+      toast({ title: t("highlightDeleted") });
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (err as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -516,11 +517,11 @@ export default function MatchDetails() {
   if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
-    <Layout title="Match Center">
+    <Layout title={t("matchCenter")}>
       {/* Scoreboard */}
       <div className="bg-card rounded-2xl shadow-lg border border-border overflow-hidden mb-8">
         <div className="bg-muted/30 p-3 text-center text-xs font-mono uppercase tracking-widest text-muted-foreground border-b border-border/50 flex justify-center items-center gap-2">
-          {isFinished ? <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="w-3 h-3"/> Final Score</span> : isLive ? <span className="flex items-center gap-1 text-red-500"><Clock className="w-3 h-3"/> En vivo</span> : <span className="flex items-center gap-1 text-primary"><Clock className="w-3 h-3"/> Live Match</span>}
+          {isFinished ? <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="w-3 h-3"/> {t("finalScore")}</span> : isLive ? <span className="flex items-center gap-1 text-red-500"><Clock className="w-3 h-3"/> {t("live")}</span> : <span className="flex items-center gap-1 text-primary"><Clock className="w-3 h-3"/> {t("liveMatch")}</span>}
         </div>
         
         <div className="p-4 sm:p-6">
@@ -535,7 +536,7 @@ export default function MatchDetails() {
             <div className="flex flex-col items-center">
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <ScoreWheel
-                  label={`Goles de ${homeTeam.name}`}
+                  label={`${t("goals")} ${homeTeam.name}`}
                   value={displayedHomeScore}
                   onChange={(score) => handleScoreWheelChange("home", score)}
                   disabled={!canModifyMatch || isFinished}
@@ -544,7 +545,7 @@ export default function MatchDetails() {
                   -
                 </span>
                 <ScoreWheel
-                  label={`Goles de ${awayTeam.name}`}
+                  label={`${t("goals")} ${awayTeam.name}`}
                   value={displayedAwayScore}
                   onChange={(score) => handleScoreWheelChange("away", score)}
                   disabled={!canModifyMatch || isFinished}
@@ -552,7 +553,7 @@ export default function MatchDetails() {
               </div>
               {canModifyMatch && !isFinished && (
                 <p className="mt-2 max-w-36 text-center text-[10px] leading-tight text-muted-foreground sm:max-w-48 sm:text-[11px]">
-                  Desliza cada número para ajustar el marcador.
+                  {t("slideScoreHint")}
                 </p>
               )}
               <div className="mt-2 text-xs text-muted-foreground font-medium uppercase tracking-wider">
@@ -570,7 +571,7 @@ export default function MatchDetails() {
           
           <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
             <MapPin className="w-4 h-4" />
-            <span>{match.location || "Main Stadium"}</span>
+            <span>{match.location || t("mainStadium")}</span>
           </div>
         </div>
 
@@ -582,19 +583,19 @@ export default function MatchDetails() {
               <Dialog open={isGoalDialogOpen} onOpenChange={setIsGoalDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="w-full shadow-sm" variant="outline">
-                  <Trophy className="w-4 h-4 mr-2" /> Detalle de gol
+                  <Trophy className="w-4 h-4 mr-2" /> {t("goalDetail")}
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Agregar detalle de gol</DialogTitle>
+                  <DialogTitle>{t("addGoalDetail")}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAddGoal} className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label>Equipo que anotó</Label>
+                    <Label>{t("scoringTeam")}</Label>
                     <Select value={selectedTeamId} onValueChange={handleGoalTeamChange}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecciona equipo" />
+                        <SelectValue placeholder={t("selectTeam")} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={String(homeTeam.id)}>{homeTeam.name}</SelectItem>
@@ -604,17 +605,17 @@ export default function MatchDetails() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Jugador, si aplica</Label>
+                    <Label>{t("playerIfApplicable")}</Label>
                     <Select
                       value={selectedPlayerId}
                       onValueChange={setSelectedPlayerId}
                       disabled={!selectedTeamId}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecciona jugador" />
+                        <SelectValue placeholder={t("selectPlayer")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="unknown">Sin jugador / desconocido</SelectItem>
+                        <SelectItem value="unknown">{t("noPlayerUnknown")}</SelectItem>
                         {selectedGoalTeamPlayers.map((player) => (
                           <SelectItem key={player.id} value={String(player.id)}>
                             {player.name} #{player.number}
@@ -625,28 +626,28 @@ export default function MatchDetails() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Minuto</Label>
+                    <Label>{t("minute")}</Label>
                     <Input 
                       type="number" 
-                      placeholder="Ej. 45"
+                      placeholder="45"
                       value={goalMinute}
                       onChange={e => setGoalMinute(e.target.value)}
                     />
                   </div>
 
                   <Button type="submit" className="w-full" disabled={createGoal.isPending}>
-                    Guardar detalle
+                    {t("saveDetail")}
                   </Button>
                 </form>
               </DialogContent>
             </Dialog>
 
               <Button variant="outline" className="w-full" onClick={handleFinishMatch} disabled={updateMatch.isPending}>
-                End Match
+                {t("endMatch")}
               </Button>
               {!isLive && hasTwitchStream && (
                 <Button type="button" variant="secondary" className="w-full" onClick={handleStartLive} disabled={updateMatch.isPending}>
-                  Marcar en vivo
+                  {t("markLive")}
                 </Button>
               )}
             </>
@@ -670,7 +671,7 @@ export default function MatchDetails() {
 
       {/* Match Events */}
       <div className="space-y-4">
-        <h3 className="font-display text-lg px-2">Match Events</h3>
+        <h3 className="font-display text-lg px-2">{t("matchEvents")}</h3>
         <div className="space-y-3">
           {goals?.sort((a, b) => (b.minute || 0) - (a.minute || 0)).map((goal) => {
             const isHomeGoal = goal.teamId === homeTeam.id;
@@ -689,7 +690,7 @@ export default function MatchDetails() {
                     <Trophy className="w-4 h-4 text-yellow-500" />
                   </div>
                   <div>
-                    <p className="font-bold text-sm">{player?.name || "Unknown Player"}</p>
+                    <p className="font-bold text-sm">{player?.name || t("unknownPlayer")}</p>
                     <p className="text-xs text-muted-foreground">{isHomeGoal ? homeTeam.name : awayTeam.name}</p>
                   </div>
                 </div>
@@ -699,7 +700,7 @@ export default function MatchDetails() {
           
           {goals?.length === 0 && (
             <div className="text-center py-8 text-muted-foreground text-sm italic">
-              No goals recorded yet.
+              {t("noGoalsRecorded")}
             </div>
           )}
         </div>
@@ -711,10 +712,10 @@ export default function MatchDetails() {
           <div>
             <h3 className="font-display text-lg flex items-center gap-2">
               <Film className="w-5 h-5 text-primary" />
-              Mejores jugadas
+              {t("highlights")}
             </h3>
             <p className="text-sm text-muted-foreground">
-              Videos cortos del partido aprobados para el público.
+              {t("highlightsDescription")}
             </p>
           </div>
 
@@ -735,18 +736,18 @@ export default function MatchDetails() {
                   }}
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Agregar jugada destacada
+                  {t("addHighlight")}
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>
-                    {editingHighlight ? "Editar jugada" : "Agregar jugada destacada"}
+                    {editingHighlight ? t("editHighlight") : t("addFeaturedPlay")}
                   </DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSaveHighlight} className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label>Enlace de YouTube</Label>
+                    <Label>{t("youtubeLink")}</Label>
                     <Input
                       type="url"
                       value={highlightVideoUrl}
@@ -755,12 +756,12 @@ export default function MatchDetails() {
                       required
                     />
                     <p className="text-xs text-muted-foreground">
-                      Sube el video a YouTube como No listado o Público y pega aquí el enlace.
+                      {t("youtubeLinkHint")}
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Miniatura opcional</Label>
+                    <Label>{t("optionalThumbnail")}</Label>
                     <Input
                       type="file"
                       accept="image/*"
@@ -769,41 +770,41 @@ export default function MatchDetails() {
                       }
                     />
                     <p className="text-xs text-muted-foreground">
-                      Si agregas imagen, se subirá a Cloudinary. Si no, YouTube mostrará su propia vista previa.
+                      {t("thumbnailHint")}
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Título</Label>
+                    <Label>{t("title")}</Label>
                     <Input
                       value={highlightTitle}
                       onChange={(e) => setHighlightTitle(e.target.value)}
-                      placeholder="Ej. Golazo al ángulo"
+                      placeholder={t("highlightTitlePlaceholder")}
                       required
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Descripción breve</Label>
+                    <Label>{t("shortDescription")}</Label>
                     <Textarea
                       value={highlightDescription}
                       onChange={(e) => setHighlightDescription(e.target.value)}
-                      placeholder="Cuenta qué pasó en esta jugada"
+                      placeholder={t("highlightDescriptionPlaceholder")}
                       rows={3}
                     />
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>Tipo de jugada</Label>
+                      <Label>{t("highlightType")}</Label>
                       <Select value={highlightType} onValueChange={setHighlightType}>
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.entries(highlightTypeLabels).map(([value, label]) => (
+                          {Object.entries(highlightTypeKeys).map(([value, labelKey]) => (
                             <SelectItem key={value} value={value}>
-                              {label}
+                              {t(labelKey)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -811,14 +812,14 @@ export default function MatchDetails() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Minuto</Label>
+                      <Label>{t("minute")}</Label>
                       <Input
                         type="number"
                         min={0}
                         max={130}
                         value={highlightMinute}
                         onChange={(e) => setHighlightMinute(e.target.value)}
-                        placeholder="Ej. 72"
+                        placeholder="72"
                         required
                       />
                     </div>
@@ -826,7 +827,7 @@ export default function MatchDetails() {
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>Equipo relacionado</Label>
+                      <Label>{t("relatedTeam")}</Label>
                       <Select
                         value={highlightTeamId}
                         onValueChange={(value) => {
@@ -835,7 +836,7 @@ export default function MatchDetails() {
                         }}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecciona equipo" />
+                          <SelectValue placeholder={t("selectTeam")} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value={String(homeTeam.id)}>
@@ -849,16 +850,16 @@ export default function MatchDetails() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Jugador, si aplica</Label>
+                      <Label>{t("playerIfApplicable")}</Label>
                       <Select
                         value={highlightPlayerId}
                         onValueChange={setHighlightPlayerId}
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Sin jugador" />
+                          <SelectValue placeholder={t("noPlayerUnknown")} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="none">Sin jugador</SelectItem>
+                          <SelectItem value="none">{t("noPlayerUnknown")}</SelectItem>
                           {highlightTeamPlayers.map((player) => (
                             <SelectItem key={player.id} value={String(player.id)}>
                               {player.name} #{player.number}
@@ -883,7 +884,7 @@ export default function MatchDetails() {
                       updateHighlight.isPending) && (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     )}
-                    {editingHighlight ? "Guardar cambios" : "Subir jugada"}
+                    {editingHighlight ? t("saveChanges") : t("uploadHighlight")}
                   </Button>
                 </form>
               </DialogContent>
@@ -905,7 +906,7 @@ export default function MatchDetails() {
                     ? awayTeam
                     : undefined;
               const player = allPlayers.find((p) => p.id === highlight.playerId);
-              const status = statusLabels[highlight.status] || statusLabels.pending;
+              const statusClassName = highlightStatusClasses[highlight.status] || highlightStatusClasses.pending;
               const embedUrl = getYouTubeEmbedUrl(highlight.videoUrl);
               const shouldShowPlayer =
                 !!embedUrl &&
@@ -940,13 +941,13 @@ export default function MatchDetails() {
                             }))
                           }
                         >
-                          Reproducir
+                          {t("play")}
                         </Button>
                       </div>
                     </div>
                   ) : (
                     <div className="aspect-video w-full bg-muted flex items-center justify-center text-sm text-muted-foreground">
-                      Video de YouTube no disponible
+                      {t("youtubeUnavailable")}
                     </div>
                   )}
                   <div className="space-y-3 p-4">
@@ -956,18 +957,25 @@ export default function MatchDetails() {
                           {highlight.title}
                         </h4>
                         <p className="text-sm text-muted-foreground">
-                          {team?.name || "Equipo"} · Minuto {highlight.minute}'
+                          {team?.name || t("teamFallback")} · {t("minuteLabel")} {highlight.minute}'
                           {player ? ` · ${player.name}` : ""}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         <Badge variant="secondary">
-                          {highlightTypeLabels[highlight.highlightType] ||
-                            "Otra"}
+                          {t(
+                            highlightTypeKeys[
+                              highlight.highlightType as keyof typeof highlightTypeKeys
+                            ] || "highlightOther",
+                          )}
                         </Badge>
                         {canReviewHighlights && (
-                          <Badge className={status.className}>
-                            {status.label}
+                          <Badge className={statusClassName}>
+                            {{
+                              pending: t("pending"),
+                              approved: t("approved"),
+                              rejected: t("rejected"),
+                            }[highlight.status] || t("pending")}
                           </Badge>
                         )}
                       </div>
@@ -991,7 +999,7 @@ export default function MatchDetails() {
                             disabled={updateHighlight.isPending}
                           >
                             <Check className="w-4 h-4 mr-1" />
-                            Aprobar
+                            {t("approve")}
                           </Button>
                         )}
                         {highlight.status !== "rejected" && (
@@ -1004,7 +1012,7 @@ export default function MatchDetails() {
                             disabled={updateHighlight.isPending}
                           >
                             <X className="w-4 h-4 mr-1" />
-                            Rechazar
+                            {t("reject")}
                           </Button>
                         )}
                         <Button
@@ -1013,7 +1021,7 @@ export default function MatchDetails() {
                           onClick={() => openEditHighlight(highlight)}
                         >
                           <Pencil className="w-4 h-4 mr-1" />
-                          Editar
+                          {t("edit")}
                         </Button>
                         <Button
                           size="sm"
@@ -1022,7 +1030,7 @@ export default function MatchDetails() {
                           disabled={deleteHighlight.isPending}
                         >
                           <Trash2 className="w-4 h-4 mr-1" />
-                          Eliminar
+                          {t("delete")}
                         </Button>
                       </div>
                     )}
@@ -1033,7 +1041,7 @@ export default function MatchDetails() {
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            Aún no hay jugadas destacadas aprobadas para este partido.
+            {t("noApprovedHighlights")}
           </div>
         )}
       </div>

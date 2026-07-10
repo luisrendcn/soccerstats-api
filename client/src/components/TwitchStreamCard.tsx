@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 type MatchWithStream = Match & {
   homeTeam?: Team;
@@ -48,7 +49,7 @@ export function getTwitchStreamQueryKey(channel: string | null) {
 
 export async function fetchTwitchStreamStatus(channel: string) {
   const res = await apiFetch(`/api/twitch/streams/${channel}`);
-  if (!res.ok) throw new Error("No se pudo consultar Twitch");
+  if (!res.ok) throw new Error("Could not check Twitch");
   return res.json() as Promise<TwitchStreamStatus>;
 }
 
@@ -89,6 +90,7 @@ export function TwitchStreamCard({
   match: MatchWithStream;
   compact?: boolean;
 }) {
+  const { t } = useLanguage();
   const channel = getTwitchChannelFromMatch(match);
   const { data: streamStatus } = useQuery({
     queryKey: getTwitchStreamQueryKey(channel),
@@ -117,7 +119,7 @@ export function TwitchStreamCard({
           <div className="flex items-center gap-2">
             <Radio className={cn("h-4 w-4", isLive ? "text-red-500" : "text-primary")} />
             <h3 className="truncate font-display text-sm font-bold">
-              {match.homeTeam?.name || "Equipo local"} vs {match.awayTeam?.name || "Equipo visitante"}
+              {match.homeTeam?.name || t("localTeam")} vs {match.awayTeam?.name || t("awayTeamLabel")}
             </h3>
           </div>
           <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -126,7 +128,7 @@ export function TwitchStreamCard({
           </p>
         </div>
         <Badge className={isLive ? "bg-red-100 text-red-700" : "bg-primary/10 text-primary"}>
-          {isLive ? "En vivo" : isRecentlyOffline ? "Finalizado" : "Directo"}
+          {isLive ? t("live") : isRecentlyOffline ? t("recentlyFinished") : t("direct")}
         </Badge>
       </div>
 
@@ -145,7 +147,7 @@ export function TwitchStreamCard({
       <div className="space-y-3 p-4">
         {isRecentlyOffline && (
           <p className="text-sm text-muted-foreground">
-            La transmisión terminó recientemente. Se ocultará del panel máximo 1 hora después de detectarse offline.
+            {t("recentlyEndedStream")}
           </p>
         )}
         {streamStatus?.stream?.title && (
@@ -154,17 +156,17 @@ export function TwitchStreamCard({
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {streamStatus?.configured === false && (
             <span>
-              Estado automático pendiente: configura Twitch en Render para detectar si está en vivo.
+              {t("automaticStatusPending")}
             </span>
           )}
           {typeof streamStatus?.stream?.viewer_count === "number" && (
-            <span>{streamStatus.stream.viewer_count} espectadores</span>
+            <span>{t("viewers", { count: streamStatus.stream.viewer_count })}</span>
           )}
         </div>
         <Button asChild variant="outline" size="sm" className="w-full">
           <a href={`https://www.twitch.tv/${channel}`} target="_blank" rel="noreferrer">
             <Tv className="mr-2 h-4 w-4" />
-            Abrir en Twitch
+            {t("openInTwitch")}
           </a>
         </Button>
       </div>

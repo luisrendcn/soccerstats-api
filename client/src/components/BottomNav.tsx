@@ -1,16 +1,18 @@
 import { Link, useLocation } from "wouter";
 import { Trophy, Calendar, Users, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 const BASE_NAV_ITEMS = [
-  { href: "/", label: "Home", icon: Trophy },
-  { href: "/tournaments", label: "Tournaments", icon: Zap },
-  { href: "/teams", label: "Teams", icon: Users },
-  { href: "/matches", label: "Matches", icon: Calendar },
-];
+  { href: "/", labelKey: "home", icon: Trophy },
+  { href: "/tournaments", labelKey: "tournaments", icon: Zap },
+  { href: "/teams", labelKey: "teams", icon: Users },
+  { href: "/matches", labelKey: "matches", icon: Calendar },
+] as const;
 
 export function BottomNav() {
   const [location] = useLocation();
+  const { t } = useLanguage();
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border/50 pb-safe">
@@ -26,7 +28,7 @@ export function BottomNav() {
                 isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}>
                 <Icon className={cn("w-6 h-6", isActive && "fill-current")} strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium uppercase tracking-wider">{item.label}</span>
+                <span className="text-[10px] font-medium uppercase tracking-wider">{t(item.labelKey)}</span>
               </div>
             </Link>
           );

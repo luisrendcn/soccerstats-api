@@ -45,20 +45,16 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { useLanguage } from "@/lib/i18n.tsx";
 
-const ROLES = [
-  { value: "admin", label: "Administrador" },
-  { value: "tournament_manager", label: "Gestor de Torneos" },
-  { value: "team_captain", label: "Capitán/Líder de equipo" },
-  { value: "referee", label: "Árbitro" },
-  { value: "public", label: "Público" },
-];
+const ROLES = ["admin", "tournament_manager", "team_captain", "referee", "public"] as const;
 
 const isTeamCaptainRole = (roleValue: string) =>
   roleValue === "team_captain" || roleValue === "team";
 
 export default function AdminUsers() {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const { data: users, isLoading } = useUsers();
   const { data: teams } = useTeams(1, 1000);
   const { data: registrationRequests, isLoading: requestsLoading } =
@@ -106,8 +102,8 @@ export default function AdminUsers() {
     if (!email || !name || !password) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Todos los campos son requeridos",
+        title: t("error"),
+        description: t("allFieldsRequired"),
       });
       return;
     }
@@ -122,8 +118,8 @@ export default function AdminUsers() {
           isTeamCaptainRole(role) && teamId !== "none" ? Number(teamId) : null,
       });
       toast({
-        title: "Éxito",
-        description: "Usuario creado exitosamente",
+        title: t("success"),
+        description: t("userCreated"),
       });
       setEmail("");
       setName("");
@@ -134,8 +130,8 @@ export default function AdminUsers() {
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -152,17 +148,17 @@ export default function AdminUsers() {
         teamId: newTeamId === "none" ? null : Number(newTeamId),
       });
       toast({
-        title: "Equipo asignado",
+        title: t("teamAssigned"),
         description:
           newTeamId === "none"
-            ? "El usuario quedó sin equipo asignado"
-            : "El capitán/líder ya puede gestionar ese equipo",
+            ? t("userWithoutAssignedTeam")
+            : t("captainCanManageTeam"),
       });
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -176,15 +172,15 @@ export default function AdminUsers() {
         role: roleChangeValue,
       });
       toast({
-        title: "Éxito",
-        description: "Rol actualizado exitosamente",
+        title: t("success"),
+        description: t("roleUpdated"),
       });
       setRoleChangeId(null);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -198,17 +194,17 @@ export default function AdminUsers() {
         isActive: statusChange.isActive,
       });
       toast({
-        title: "Éxito",
+        title: t("success"),
         description: statusChange.isActive
-          ? "Usuario desbloqueado exitosamente"
-          : "Usuario bloqueado exitosamente",
+          ? t("userUnlocked")
+          : t("userBlocked"),
       });
       setStatusChange(null);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -223,18 +219,18 @@ export default function AdminUsers() {
         await rejectRequest.mutateAsync(reviewRequest.id);
       }
       toast({
-        title: "Solicitud procesada",
+        title: t("requestProcessed"),
         description:
           reviewRequest.action === "approve"
-            ? "El usuario ya puede ingresar a la app"
-            : "La solicitud fue rechazada",
+            ? t("userCanEnterApp")
+            : t("requestRejected"),
       });
       setReviewRequest(null);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -245,22 +241,22 @@ export default function AdminUsers() {
     try {
       await deleteUserPermanently.mutateAsync(deleteUser.id);
       toast({
-        title: "Usuario eliminado",
-        description: `${deleteUser.name} fue eliminado de la base de datos`,
+        title: t("userDeleted"),
+        description: t("userDeletedDescription", { name: deleteUser.name }),
       });
       setDeleteUser(null);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
 
   if (isLoading || requestsLoading) {
     return (
-      <Layout title="Gestión de Usuarios">
+      <Layout title={t("userManagement")}>
         <div className="flex justify-center items-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
         </div>
@@ -269,21 +265,25 @@ export default function AdminUsers() {
   }
 
   const roleLabel = (roleValue: string) => {
-    if (roleValue === "team") return "Capitán/Líder de equipo";
-    return ROLES.find((r) => r.value === roleValue)?.label || roleValue;
+    if (roleValue === "admin") return t("roleAdmin");
+    if (roleValue === "tournament_manager") return t("roleTournamentManager");
+    if (roleValue === "team_captain" || roleValue === "team") return t("roleTeamCaptainLong");
+    if (roleValue === "referee") return t("roleReferee");
+    if (roleValue === "public") return t("publicUser");
+    return roleValue;
   };
   const activeUsers = users?.filter((user) => user.isActive) || [];
   const blockedUsers = users?.filter((user) => !user.isActive) || [];
   const canLockOrDeleteUser = (roleValue: string) => roleValue !== "admin";
 
   return (
-    <Layout title="Gestión de Usuarios">
+    <Layout title={t("userManagement")}>
       <div className="space-y-6">
         <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-amber-700" />
-              <h2 className="font-semibold text-amber-900">Lista de espera</h2>
+              <h2 className="font-semibold text-amber-900">{t("waitingList")}</h2>
             </div>
             <span className="rounded-full bg-amber-600 px-2 py-1 text-xs font-bold text-white">
               {registrationRequests?.length || 0}
@@ -299,16 +299,16 @@ export default function AdminUsers() {
                 <p className="font-medium">{request.name}</p>
                 <p className="text-xs text-muted-foreground">{request.email}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Rol solicitado:{" "}
+                  {t("requestedRole")}:{" "}
                   <span className="font-semibold">
                     {roleLabel(request.requestedRole || "team_captain")}
                   </span>
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Solicitó acceso:{" "}
+                  {t("requestedAccess")}:{" "}
                   {request.requestedAt
                     ? new Date(request.requestedAt).toLocaleString()
-                    : "Fecha no disponible"}
+                    : t("dateUnavailable")}
                 </p>
                 <div className="mt-3 flex gap-2">
                   <Button
@@ -324,7 +324,7 @@ export default function AdminUsers() {
                     }
                   >
                     <Check className="h-4 w-4" />
-                    Aprobar
+                    {t("approve")}
                   </Button>
                   <Button
                     size="sm"
@@ -340,7 +340,7 @@ export default function AdminUsers() {
                     }
                   >
                     <X className="h-4 w-4" />
-                    Rechazar
+                    {t("reject")}
                   </Button>
                 </div>
               </div>
@@ -348,7 +348,7 @@ export default function AdminUsers() {
 
             {!registrationRequests?.length && (
               <p className="py-4 text-center text-sm text-muted-foreground">
-                No hay solicitudes pendientes
+                {t("noPendingRequests")}
               </p>
             )}
           </div>
@@ -357,26 +357,26 @@ export default function AdminUsers() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">
-            Usuarios activos ({activeUsers.length})
+            {t("activeUsers", { count: activeUsers.length })}
           </h2>
           <Dialog open={openCreate} onOpenChange={setOpenCreate}>
             <DialogTrigger asChild>
               <Button size="sm" className="gap-2">
                 <Plus className="w-4 h-4" />
-                Nuevo Usuario
+                {t("newUser")}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Crear Nuevo Usuario</DialogTitle>
+                <DialogTitle>{t("createNewUser")}</DialogTitle>
                 <DialogDescription>
-                  Completa el formulario para crear un nuevo usuario
+                  {t("createUserDescription")}
                 </DialogDescription>
               </DialogHeader>
 
               <form onSubmit={handleCreateUser} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nombre Completo</Label>
+                  <Label htmlFor="name">{t("fullName")}</Label>
                   <Input
                     id="name"
                     placeholder="Juan Pérez"
@@ -386,7 +386,7 @@ export default function AdminUsers() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t("email")}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -397,7 +397,7 @@ export default function AdminUsers() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Contraseña</Label>
+                  <Label htmlFor="password">{t("password")}</Label>
                   <Input
                     id="password"
                     type="password"
@@ -408,7 +408,7 @@ export default function AdminUsers() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="role">Rol</Label>
+                  <Label htmlFor="role">{t("role")}</Label>
                   <Select
                     value={role}
                     onValueChange={(value) => {
@@ -420,9 +420,9 @@ export default function AdminUsers() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {ROLES.map((r) => (
-                        <SelectItem key={r.value} value={r.value}>
-                          {r.label}
+                      {ROLES.map((roleValue) => (
+                        <SelectItem key={roleValue} value={roleValue}>
+                          {roleLabel(roleValue)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -431,13 +431,13 @@ export default function AdminUsers() {
 
                 {isTeamCaptainRole(role) && (
                   <div className="space-y-2">
-                    <Label htmlFor="teamId">Equipo asignado</Label>
+                    <Label htmlFor="teamId">{t("assignedTeam")}</Label>
                     <Select value={teamId} onValueChange={setTeamId}>
                       <SelectTrigger id="teamId">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Sin equipo todavía</SelectItem>
+                        <SelectItem value="none">{t("noTeamYet")}</SelectItem>
                         {teams?.map((team) => (
                           <SelectItem key={team.id} value={String(team.id)}>
                             {team.name}
@@ -456,10 +456,10 @@ export default function AdminUsers() {
                   {createUser.isPending ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creando...
+                      {t("creating")}
                     </>
                   ) : (
-                    "Crear Usuario"
+                    t("createNewUser")
                   )}
                 </Button>
               </form>
@@ -473,11 +473,11 @@ export default function AdminUsers() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b border-border/50">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Nombre</th>
-                  <th className="px-4 py-3 text-left font-semibold">Email</th>
-                  <th className="px-4 py-3 text-left font-semibold">Rol</th>
-                  <th className="px-4 py-3 text-left font-semibold">Estado</th>
-                  <th className="px-4 py-3 text-center font-semibold">Acciones</th>
+                  <th className="px-4 py-3 text-left font-semibold">{t("name")}</th>
+                  <th className="px-4 py-3 text-left font-semibold">{t("email")}</th>
+                  <th className="px-4 py-3 text-left font-semibold">{t("role")}</th>
+                  <th className="px-4 py-3 text-left font-semibold">{t("status")}</th>
+                  <th className="px-4 py-3 text-center font-semibold">{t("actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/30">
@@ -499,9 +499,9 @@ export default function AdminUsers() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {ROLES.map((r) => (
-                            <SelectItem key={r.value} value={r.value}>
-                              {r.label}
+                          {ROLES.map((roleValue) => (
+                            <SelectItem key={roleValue} value={roleValue}>
+                              {roleLabel(roleValue)}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -518,11 +518,11 @@ export default function AdminUsers() {
                             disabled={!user.isActive || updateUser.isPending}
                           >
                             <SelectTrigger className="h-8 w-44">
-                              <SelectValue placeholder="Equipo asignado" />
+                              <SelectValue placeholder={t("assignedTeam")} />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">
-                                Sin equipo asignado
+                                {t("noAssignedTeam")}
                               </SelectItem>
                               {teams?.map((team) => (
                                 <SelectItem
@@ -545,7 +545,7 @@ export default function AdminUsers() {
                             : "bg-red-100 text-red-700"
                         }`}
                       >
-                        {user.isActive ? "Activo" : "Bloqueado"}
+                        {user.isActive ? t("active") : t("blocked")}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -564,7 +564,7 @@ export default function AdminUsers() {
                                 ? "text-red-600 hover:text-red-700"
                                 : "text-green-600 hover:text-green-700"
                             }`}
-                            title={user.isActive ? "Bloquear usuario" : "Desbloquear usuario"}
+                            title={user.isActive ? t("blockUser") : t("unblockUser")}
                           >
                             {user.isActive ? (
                               <Lock className="w-4 h-4" />
@@ -581,14 +581,14 @@ export default function AdminUsers() {
                               })
                             }
                             className="ml-2 p-1 text-red-700 transition-colors hover:text-red-900"
-                            title="Eliminar usuario de la base de datos"
+                            title={t("deleteUserFromDatabase")}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </>
                       ) : (
                         <span className="text-xs text-muted-foreground">
-                          Protegido
+                          {t("protected")}
                         </span>
                       )}
                     </td>
@@ -600,14 +600,14 @@ export default function AdminUsers() {
 
           {!activeUsers.length && (
             <div className="text-center py-8 text-muted-foreground">
-              No hay usuarios activos
+              {t("noActiveUsers")}
             </div>
           )}
         </div>
 
         <section>
           <h2 className="mb-3 text-lg font-semibold">
-            Usuarios bloqueados ({blockedUsers.length})
+            {t("blockedUsers", { count: blockedUsers.length })}
           </h2>
           <div className="space-y-2">
             {blockedUsers.map((user) => (
@@ -636,7 +636,7 @@ export default function AdminUsers() {
                       }
                     >
                       <LockOpen className="h-4 w-4" />
-                      Desbloquear
+                      {t("unblockUser")}
                     </Button>
                     <Button
                       size="sm"
@@ -651,19 +651,19 @@ export default function AdminUsers() {
                       }
                     >
                       <Trash2 className="h-4 w-4" />
-                      Eliminar
+                      {t("delete")}
                     </Button>
                   </div>
                 ) : (
                   <span className="ml-3 text-xs text-muted-foreground">
-                    Protegido
+                    {t("protected")}
                   </span>
                 )}
               </div>
             ))}
             {!blockedUsers.length && (
               <p className="py-4 text-center text-sm text-muted-foreground">
-                No hay usuarios bloqueados
+                {t("noBlockedUsers")}
               </p>
             )}
           </div>
@@ -677,15 +677,16 @@ export default function AdminUsers() {
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
                 <Shield className="w-4 h-4" />
-                Cambiar Rol
+                {t("changeRole")}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                ¿Estás seguro de que deseas cambiar el rol a{" "}
-                <span className="font-semibold">{roleLabel(roleChangeValue)}</span>?
+                {t("changeRoleDescription", {
+                  role: roleLabel(roleChangeValue),
+                })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="flex gap-3 justify-end">
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={confirmRoleChange}
                 disabled={updateRole.isPending}
@@ -693,10 +694,10 @@ export default function AdminUsers() {
                 {updateRole.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Actualizando...
+                    {t("updating")}
                   </>
                 ) : (
-                  "Confirmar"
+                  t("confirm")
                 )}
               </AlertDialogAction>
             </div>
@@ -713,17 +714,22 @@ export default function AdminUsers() {
             <AlertDialogHeader>
               <AlertDialogTitle>
                 {reviewRequest?.action === "approve"
-                  ? "Aprobar solicitud"
-                  : "Rechazar solicitud"}
+                  ? t("approveRequest")
+                  : t("rejectRequest")}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {reviewRequest?.action === "approve"
-                  ? `¿Deseas crear la cuenta de ${reviewRequest.name} como ${roleLabel(reviewRequest.requestedRole)} y permitirle ingresar?`
-                  : `¿Deseas rechazar la solicitud de ${reviewRequest?.name}? Este correo no podrá enviar otra solicitud.`}
+                  ? t("approveRequestDescription", {
+                      name: reviewRequest.name,
+                      role: roleLabel(reviewRequest.requestedRole),
+                    })
+                  : t("rejectRequestDescription", {
+                      name: reviewRequest?.name || "",
+                    })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="flex justify-end gap-3">
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleReviewRequest}
                 disabled={approveRequest.isPending || rejectRequest.isPending}
@@ -734,10 +740,10 @@ export default function AdminUsers() {
                 }
               >
                 {approveRequest.isPending || rejectRequest.isPending
-                  ? "Procesando..."
+                  ? t("processing")
                   : reviewRequest?.action === "approve"
-                    ? "Aprobar"
-                    : "Rechazar"}
+                    ? t("approve")
+                    : t("reject")}
               </AlertDialogAction>
             </div>
           </AlertDialogContent>
@@ -750,16 +756,18 @@ export default function AdminUsers() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {statusChange?.isActive ? "Desbloquear Usuario" : "Bloquear Usuario"}
+                {statusChange?.isActive ? t("unlockUser") : t("lockUser")}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {statusChange?.isActive
-                  ? `¿Deseas permitir que ${statusChange.name} vuelva a ingresar a la app?`
-                  : `¿Deseas bloquear a ${statusChange?.name}? Su sesión se cerrará y no podrá ingresar hasta que un administrador lo desbloquee.`}
+                  ? t("unlockUserDescription", { name: statusChange.name })
+                  : t("lockUserDescription", {
+                      name: statusChange?.name || "",
+                    })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="flex gap-3 justify-end">
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleStatusChange}
                 disabled={setUserActive.isPending}
@@ -772,10 +780,10 @@ export default function AdminUsers() {
                 {setUserActive.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Actualizando...
+                    {t("updating")}
                   </>
                 ) : (
-                  statusChange?.isActive ? "Desbloquear" : "Bloquear"
+                  statusChange?.isActive ? t("unblockUser") : t("blockUser")
                 )}
               </AlertDialogAction>
             </div>
@@ -790,15 +798,16 @@ export default function AdminUsers() {
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Eliminar de la base de datos</AlertDialogTitle>
+              <AlertDialogTitle>{t("deleteFromDatabase")}</AlertDialogTitle>
               <AlertDialogDescription>
-                ¿Seguro que deseas eliminar definitivamente a {deleteUser?.name} (
-                {deleteUser?.email})? Esta acción borra su cuenta de la base de
-                datos y no se puede deshacer.
+                {t("deleteFromDatabaseDescription", {
+                  name: deleteUser?.name || "",
+                  email: deleteUser?.email || "",
+                })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="flex gap-3 justify-end">
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handlePermanentDelete}
                 disabled={deleteUserPermanently.isPending}
@@ -807,10 +816,10 @@ export default function AdminUsers() {
                 {deleteUserPermanently.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Eliminando...
+                    {t("deleting")}
                   </>
                 ) : (
-                  "Eliminar definitivamente"
+                  t("deletePermanently")
                 )}
               </AlertDialogAction>
             </div>

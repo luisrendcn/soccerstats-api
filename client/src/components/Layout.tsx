@@ -6,6 +6,7 @@ import { UserProfile } from "./UserProfile";
 import { refreshAppData } from "@/lib/queryClient";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 interface LayoutProps {
   children: ReactNode;
@@ -16,6 +17,7 @@ interface LayoutProps {
 
 export function Layout({ children, header, title, showBack }: LayoutProps) {
   const queryClient = useQueryClient();
+  const { t } = useLanguage();
   const activeFetches = useIsFetching();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshInProgress = isRefreshing || activeFetches > 0;
@@ -37,7 +39,7 @@ export function Layout({ children, header, title, showBack }: LayoutProps) {
           <div className="flex items-center gap-2">
             {showBack && (
               <button
-                title="Go back"
+                title={t("goBack")}
                 className="p-2 rounded-full hover:bg-muted/20"
                 onClick={() => window.history.back()}
               >
@@ -46,13 +48,13 @@ export function Layout({ children, header, title, showBack }: LayoutProps) {
             )}
             {header ? header : (
               <h1 className="text-xl font-display font-bold tracking-tight text-foreground">
-                {title || "League App"}
+                {title || t("leagueApp")}
               </h1>
             )}
           </div>
           <div className="flex items-center gap-2">
             <button
-              title="Actualizar datos"
+              title={t("refreshData")}
               className="rounded-full p-2 hover:bg-muted/20 disabled:opacity-60"
               onClick={handleRefresh}
               disabled={refreshInProgress}

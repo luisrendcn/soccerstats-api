@@ -11,9 +11,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { User, LogOut, Settings, Users } from "lucide-react";
 import { Loader2 } from "lucide-react";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 export function UserProfile() {
   const { data: auth, isLoading } = useAuth();
+  const { t } = useLanguage();
   const logout = useLogout();
   const [, setLocation] = useLocation();
   const isAdmin = auth?.userRole === "admin";
@@ -21,12 +23,12 @@ export function UserProfile() {
   const pendingCount = registrationRequests?.length || 0;
   const roleLabel = (role: string) =>
     ({
-      admin: "Administrador",
-      tournament_manager: "Gestor de torneos",
-      team_captain: "Capitán/Líder",
-      team: "Capitán/Líder",
-      referee: "Árbitro",
-      public: "Público",
+      admin: t("roleAdmin"),
+      tournament_manager: t("roleTournamentManager"),
+      team_captain: t("roleTeamCaptain"),
+      team: t("roleTeamCaptain"),
+      referee: t("roleReferee"),
+      public: t("publicUser"),
     } as Record<string, string>)[role] || role;
 
   if (isLoading && auth !== null) {
@@ -40,7 +42,7 @@ export function UserProfile() {
         size="sm"
         onClick={() => setLocation("/register")}
       >
-        Solicitar rol
+        {t("requestRole")}
       </Button>
     );
   }
@@ -81,14 +83,14 @@ export function UserProfile() {
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-          Rol: <span className="font-semibold">{roleLabel(auth.userRole)}</span>
+          {t("role")}: <span className="font-semibold">{roleLabel(auth.userRole)}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {auth.userRole === "admin" && (
           <>
             <DropdownMenuItem onClick={() => setLocation("/admin/users")}>
               <Users className="w-4 h-4 mr-2" />
-              Gestión de Usuarios
+              {t("userManagement")}
               {pendingCount > 0 && (
                 <span className="ml-auto rounded-full bg-red-600 px-2 py-0.5 text-xs text-white">
                   {pendingCount}
@@ -100,11 +102,11 @@ export function UserProfile() {
         )}
         <DropdownMenuItem onClick={() => setLocation("/settings")}>
           <Settings className="w-4 h-4 mr-2" />
-          Configuración
+          {t("settings")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={handleLogout} className="text-red-600">
           <LogOut className="w-4 h-4 mr-2" />
-          Cerrar Sesión
+          {t("logout")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

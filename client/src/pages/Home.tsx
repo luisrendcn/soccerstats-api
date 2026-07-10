@@ -17,12 +17,12 @@ export default function Home() {
   const tournaments = bootstrap?.tournaments;
   const roleLabel = (role: string) =>
     ({
-      admin: "Administrador",
-      tournament_manager: "Gestor de torneos",
-      team_captain: "Capitán/Líder de equipo",
-      team: "Capitán/Líder de equipo",
-      referee: "Árbitro",
-      public: "Público",
+      admin: t("roleAdmin"),
+      tournament_manager: t("roleTournamentManager"),
+      team_captain: t("roleTeamCaptainLong"),
+      team: t("roleTeamCaptainLong"),
+      referee: t("roleReferee"),
+      public: t("publicUser"),
     } as Record<string, string>)[role] || role;
 
   useEffect(() => {
@@ -66,12 +66,12 @@ export default function Home() {
       <section>
         {showWelcome && auth?.name && (
           <div className="mb-6 rounded-xl border border-primary/10 bg-primary/5 p-4">
-            <p className="text-sm text-muted-foreground">Bienvenido</p>
+            <p className="text-sm text-muted-foreground">{t("welcome")}</p>
             <h2 className="text-2xl font-display font-bold text-foreground">
               {auth.name}
             </h2>
             <p className="mt-1 text-xs uppercase tracking-wider text-primary">
-              Rol: {roleLabel(auth.userRole)}
+              {t("role")}: {roleLabel(auth.userRole)}
             </p>
           </div>
         )}
@@ -79,27 +79,24 @@ export default function Home() {
         {!auth && (
           <div className="mb-6 rounded-xl border border-primary/10 bg-card p-4 shadow-sm">
             <p className="text-sm font-semibold text-foreground">
-              Estás navegando como público
+              {t("browsingAsPublic")}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Puedes ver torneos, equipos, calendario y resultados. Si quieres
-              cumplir un rol como gestor de torneos, capitán/líder de equipo
-              o árbitro, comunícate con el administrador al 3507803134 o
-              solicita acceso.
+              {t("publicAccessDescription")}
             </p>
             <Link
               href="/register"
               className="mt-3 inline-block text-sm font-bold text-primary hover:underline"
             >
-              Solicitar un rol
+              {t("requestRole")}
             </Link>
             <p className="mt-3 text-sm text-muted-foreground">
-              ¿Ya tienes una cuenta aprobada?{" "}
+              {t("alreadyApprovedAccount")}{" "}
               <Link
                 href="/login"
                 className="font-semibold text-primary hover:underline"
               >
-                Inicia sesión
+                {t("login")}
               </Link>
             </p>
           </div>
@@ -111,7 +108,7 @@ export default function Home() {
         </div>
         {isFetching && bootstrap && (
           <p className="mb-3 text-xs text-muted-foreground">
-            Actualizando datos recientes...
+            {t("refreshRecentData")}
           </p>
         )}
         
@@ -123,9 +120,9 @@ export default function Home() {
           {enrichedMatches?.length === 0 && (
             <div className="text-center py-10 bg-muted/20 rounded-xl border border-dashed border-border">
               <Trophy className="w-10 h-10 mx-auto text-muted-foreground/30 mb-2" />
-              <p className="text-sm text-muted-foreground">No matches played yet.</p>
+              <p className="text-sm text-muted-foreground">{t("noMatchesPlayed")}</p>
               <Link href="/tournaments" className="mt-2 inline-block text-primary text-sm font-medium hover:underline">
-                Ver torneos
+                {t("viewTournaments")}
               </Link>
             </div>
           )}

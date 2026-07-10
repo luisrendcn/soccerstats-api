@@ -1,4 +1,5 @@
 import { useStandings } from "@/hooks/use-standings";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 interface StandingTableProps {
   title?: string;
@@ -7,15 +8,16 @@ interface StandingTableProps {
 
 export default function StandingsTable({ title, tournamentId }: StandingTableProps) {
   const { standings, loading, error } = useStandings(tournamentId);
+  const { t } = useLanguage();
 
   if (loading) {
-    return <p className="mt-4 text-center">Cargando tabla...</p>;
+    return <p className="mt-4 text-center">{t("loading")}</p>;
   }
 
   if (error) {
     return (
       <p className="mt-4 text-center text-red-500">
-        Error: {error}
+        {t("error")}: {error}
       </p>
     );
   }
@@ -26,7 +28,7 @@ export default function StandingsTable({ title, tournamentId }: StandingTablePro
       <table className="min-w-full border rounded-lg">
         <thead className="bg-gray-100">
           <tr>
-            <th className="px-3 py-2 text-left">Equipo</th>
+            <th className="px-3 py-2 text-left">{t("teamsTitle")}</th>
             <th className="px-3 py-2 text-center">PJ</th>
             <th className="px-3 py-2 text-center">PG</th>
             <th className="px-3 py-2 text-center">PE</th>
@@ -56,7 +58,7 @@ export default function StandingsTable({ title, tournamentId }: StandingTablePro
           {standings.length === 0 && (
             <tr className="border-t">
               <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
-                No hay equipos inscritos en este torneo.
+                {t("tournamentHasNoTeams")}
               </td>
             </tr>
           )}

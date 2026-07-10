@@ -7,10 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Lock } from "lucide-react";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const login = useLogin();
   
   const [email, setEmail] = useState("");
@@ -21,13 +23,13 @@ export default function Login() {
     
     try {
       await login.mutateAsync({ email, password });
-      toast({ title: "✓ Bienvenido", description: "Iniciaste sesión exitosamente." });
+      toast({ title: `✓ ${t("loginSuccessTitle")}`, description: t("loginSuccessDescription") });
       setLocation("/");
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message
+        title: t("error"),
+        description: t("unexpectedError")
       });
     }
   };
@@ -42,13 +44,12 @@ export default function Login() {
           </div>
 
           <div className="mb-6 rounded-xl border border-muted bg-muted/30 p-3 text-sm text-muted-foreground">
-            El acceso público no requiere iniciar sesión. Esta entrada es sólo
-            para usuarios con rol aprobado por el administrador.
+            {t("publicLoginNotice")}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("email")}</Label>
               <Input
                 id="email"
                 type="email"
@@ -60,7 +61,7 @@ export default function Login() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
+              <Label htmlFor="password">{t("password")}</Label>
               <Input
                 id="password"
                 type="password"
@@ -79,21 +80,21 @@ export default function Login() {
               {login.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Iniciando sesión...
+                  {t("signingIn")}
                 </>
               ) : (
-                "Iniciar Sesión"
+                t("signIn")
               )}
             </Button>
           </form>
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
-            ¿Necesitas cumplir un rol?{" "}
+            {t("needRole")}{" "}
             <button
               onClick={() => setLocation("/register")}
               className="text-primary hover:underline font-semibold"
             >
-              Solicita acceso
+              {t("requestAccess")}
             </button>
           </div>
 
@@ -103,7 +104,7 @@ export default function Login() {
             className="mt-4 w-full"
             onClick={() => setLocation("/")}
           >
-            Continuar como público
+            {t("continueAsPublic")}
           </Button>
         </div>
       </Card>

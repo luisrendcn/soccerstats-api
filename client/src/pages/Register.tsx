@@ -8,18 +8,16 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, UserPlus } from "lucide-react";
+import { useLanguage } from "@/lib/i18n.tsx";
 
-const REQUESTABLE_ROLES = [
-  { value: "tournament_manager", label: "Gestor de torneos" },
-  { value: "team_captain", label: "Capitán / líder de equipo" },
-  { value: "referee", label: "Árbitro" },
-] as const;
+const REQUESTABLE_ROLES = ["tournament_manager", "team_captain", "referee"] as const;
 
-type RequestableRole = (typeof REQUESTABLE_ROLES)[number]["value"];
+type RequestableRole = (typeof REQUESTABLE_ROLES)[number];
 
 export default function Register() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const register = useRegister();
   const [requestSent, setRequestSent] = useState(false);
   
@@ -35,8 +33,8 @@ export default function Register() {
     if (!name.trim()) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "El nombre es requerido"
+        title: t("error"),
+        description: t("nameRequired")
       });
       return;
     }
@@ -44,8 +42,8 @@ export default function Register() {
     if (password !== confirmPassword) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Las contraseñas no coinciden"
+        title: t("error"),
+        description: t("passwordsDoNotMatch")
       });
       return;
     }
@@ -53,27 +51,27 @@ export default function Register() {
     if (password.length < 6) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "La contraseña debe tener al menos 6 caracteres"
+        title: t("error"),
+        description: t("passwordMinLength")
       });
       return;
     }
 
     try {
-      const response = await register.mutateAsync({
+      await register.mutateAsync({
         email,
         name,
         password,
         confirmPassword,
         requestedRole,
       });
-      toast({ title: "Solicitud enviada", description: response.message });
+      toast({ title: t("requestSent"), description: t("requestPendingDescription") });
       setRequestSent(true);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message
+        title: t("error"),
+        description: t("unexpectedError")
       });
     }
   };
@@ -84,32 +82,29 @@ export default function Register() {
         <div className="p-8">
           <div className="flex items-center justify-center gap-2 mb-8">
             <UserPlus className="w-6 h-6 text-primary" />
-            <h1 className="text-2xl font-bold">Solicitar un rol</h1>
+            <h1 className="text-2xl font-bold">{t("requestRoleTitle")}</h1>
           </div>
 
           <div className="mb-6 rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm text-muted-foreground">
-            La app funciona como público sin cuenta. Si necesitas cumplir un
-            rol dentro de la plataforma, solicita acceso aquí o comunícate con
-            el administrador al <span className="font-semibold text-foreground">3507803134</span>.
+            {t("appWorksPublicly")}
           </div>
 
           {requestSent ? (
             <div className="space-y-5 text-center">
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
-                <h2 className="font-semibold">Solicitud en espera</h2>
+                <h2 className="font-semibold">{t("requestPendingTitle")}</h2>
                 <p className="mt-2 text-sm">
-                  Un administrador debe aprobar tu cuenta antes de que puedas
-                  iniciar sesión con el rol solicitado.
+                  {t("requestPendingDescription")}
                 </p>
               </div>
               <Button className="w-full" onClick={() => setLocation("/")}>
-                Volver a la app pública
+                {t("backToPublicApp")}
               </Button>
             </div>
           ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre Completo</Label>
+              <Label htmlFor="name">{t("fullName")}</Label>
               <Input
                 id="name"
                 type="text"
@@ -121,7 +116,7 @@ export default function Register() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="requestedRole">Rol que deseas cumplir</Label>
+              <Label htmlFor="requestedRole">{t("roleToRequest")}</Label>
               <Select
                 value={requestedRole}
                 onValueChange={(value) =>
@@ -133,8 +128,12 @@ export default function Register() {
                 </SelectTrigger>
                 <SelectContent>
                   {REQUESTABLE_ROLES.map((role) => (
-                    <SelectItem key={role.value} value={role.value}>
-                      {role.label}
+                    <SelectItem key={role} value={role}>
+                      {{
+                        tournament_manager: t("roleTournamentManager"),
+                        team_captain: t("roleTeamCaptain"),
+                        referee: t("roleReferee"),
+                      }[role]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -142,7 +141,7 @@ export default function Register() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("email")}</Label>
               <Input
                 id="email"
                 type="email"
@@ -154,7 +153,7 @@ export default function Register() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
+              <Label htmlFor="password">{t("password")}</Label>
               <Input
                 id="password"
                 type="password"
@@ -166,7 +165,7 @@ export default function Register() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar Contraseña</Label>
+              <Label htmlFor="confirmPassword">{t("confirmPassword")}</Label>
               <Input
                 id="confirmPassword"
                 type="password"
@@ -185,22 +184,22 @@ export default function Register() {
               {register.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creando cuenta...
+                  {t("sendingRequest")}
                 </>
               ) : (
-                "Enviar solicitud"
+                t("sendRequest")
               )}
             </Button>
           </form>
           )}
 
           {!requestSent && <div className="mt-6 text-center text-sm text-muted-foreground">
-            ¿Ya tienes una cuenta aprobada?{" "}
+            {t("alreadyApprovedAccount")}{" "}
             <button
               onClick={() => setLocation("/login")}
               className="text-primary hover:underline font-semibold"
             >
-              Inicia sesión
+              {t("login")}
             </button>
           </div>}
           <Button
@@ -209,7 +208,7 @@ export default function Register() {
             className="mt-4 w-full"
             onClick={() => setLocation("/")}
           >
-            Continuar como público
+            {t("continueAsPublic")}
           </Button>
         </div>
       </Card>

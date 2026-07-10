@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 export default function TeamDetails() {
   const [match, params] = useRoute("/teams/:id");
@@ -32,6 +33,7 @@ export default function TeamDetails() {
   const players = playersResp;
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLanguage();
   
   const createPlayer = useCreatePlayer();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -52,17 +54,17 @@ export default function TeamDetails() {
         teamId, 
         number: playerNumber ? parseInt(playerNumber) : undefined 
       });
-      toast({ title: "Player added!", description: `${playerName} joined the team.` });
+      toast({ title: t("playerAdded"), description: t("playerJoinedTeam", { name: playerName }) });
       setPlayerName("");
       setPlayerNumber("");
       setIsDialogOpen(false);
     } catch (err) {
-      toast({ variant: "destructive", title: "Error", description: (err as Error).message });
+      toast({ variant: "destructive", title: t("error"), description: t("unexpectedError") });
     }
   };
 
   if (teamLoading || (!isVideogameTeam && playersLoading)) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
-  if (!team) return <div>Team not found</div>;
+  if (!team) return <div>{t("teamNotFound")}</div>;
 
   return (
     <Layout title={team.name} header={
@@ -78,14 +80,14 @@ export default function TeamDetails() {
               <Gamepad2 className="mt-0.5 h-5 w-5 text-primary" />
               <div className="space-y-3">
                 <Badge className="bg-primary/10 text-primary">
-                  Torneo de videojuego
+                  {t("videogameTournament")}
                 </Badge>
                 <div>
                   <h2 className="font-display text-lg font-bold">
-                    Equipo inscrito en torneo de videojuego
+                    {t("videogameTeamProfileTitle")}
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    Este perfil solo muestra la inscripción del equipo. Los equipos de videojuego no manejan jugadores ni alineación.
+                    {t("videogameTeamProfileDescription")}
                   </p>
                 </div>
               </div>
@@ -96,7 +98,7 @@ export default function TeamDetails() {
             {team.videogameTournaments?.map((tournament) => (
               <Card key={tournament.tournamentId} className="p-4">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Torneo
+                  {t("tournament")}
                 </p>
                 <h3 className="mt-1 font-semibold">{tournament.tournamentName}</h3>
                 {tournament.twitchChannel && (
@@ -113,41 +115,41 @@ export default function TeamDetails() {
       <div className="space-y-6">
         {/* Roster Header */}
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-display">Active Roster</h2>
+          <h2 className="text-lg font-display">{t("activeRoster")}</h2>
           
           {canManagePlayers && (
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="sm" className="gap-2 rounded-full">
-                  <UserPlus className="w-4 h-4" /> Add Player
+                  <UserPlus className="w-4 h-4" /> {t("addPlayer")}
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Add Player to {team.name}</DialogTitle>
+                  <DialogTitle>{t("addPlayerToTeam", { team: team.name })}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAddPlayer} className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Player Name</Label>
+                    <Label htmlFor="name">{t("playerName")}</Label>
                     <Input 
                       id="name" 
                       value={playerName} 
                       onChange={(e) => setPlayerName(e.target.value)} 
-                      placeholder="e.g. Lionel Messi"
+                      placeholder="Lionel Messi"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="number">Jersey Number (Optional)</Label>
+                    <Label htmlFor="number">{t("jerseyNumberOptional")}</Label>
                     <Input 
                       id="number" 
                       type="number"
                       value={playerNumber} 
                       onChange={(e) => setPlayerNumber(e.target.value)} 
-                      placeholder="e.g. 10"
+                      placeholder="10"
                     />
                   </div>
                   <Button type="submit" className="w-full" disabled={createPlayer.isPending}>
-                    {createPlayer.isPending ? "Adding..." : "Add Player"}
+                    {createPlayer.isPending ? t("adding") : t("addPlayer")}
                   </Button>
                 </form>
               </DialogContent>
@@ -164,13 +166,13 @@ export default function TeamDetails() {
               </div>
               <div className="flex-1">
                 <p className="font-bold text-foreground">{player.name}</p>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Forward</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("forward")}</p>
               </div>
               {canDeletePlayers && (
-                <button title={`Remove player ${player.name}`} className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
-                  if (!confirm(`Remove player ${player.name}?`)) return;
+                <button title={t("removePlayerConfirm", { name: player.name })} className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
+                  if (!confirm(t("removePlayerConfirm", { name: player.name }))) return;
                   const response = await apiFetch(`/api/players/${player.id}`, { method: "DELETE" });
-                  if (!response.ok) throw new Error("Failed to remove player");
+                  if (!response.ok) throw new Error(t("removePlayerFailed"));
                   await refreshAppData(queryClient);
                 }}>
                   <Trash className="w-4 h-4 text-red-600" />
@@ -182,7 +184,7 @@ export default function TeamDetails() {
           {players?.length === 0 && (
             <div className="text-center py-12 border-2 border-dashed border-border rounded-xl bg-muted/10">
               <Shirt className="w-12 h-12 mx-auto text-muted-foreground/20 mb-3" />
-              <p className="text-muted-foreground">No players on roster yet.</p>
+              <p className="text-muted-foreground">{t("noPlayersOnRoster")}</p>
             </div>
           )}
         </div>

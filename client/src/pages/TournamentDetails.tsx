@@ -41,20 +41,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StandingsTable from "@/components/ui/StandingTable";
+import { useLanguage } from "@/lib/i18n.tsx";
 
 interface TournamentDetailsProps {
   tournamentId: number;
 }
 
-const statusLabels: Record<string, { label: string; variant: any }> = {
-  draft: { label: "Borrador", variant: "secondary" },
-  active: { label: "Activo", variant: "default" },
-  finished: { label: "Finalizado", variant: "outline" },
+const statusVariants: Record<string, any> = {
+  draft: "secondary",
+  active: "default",
+  finished: "outline",
 };
 
 export default function TournamentDetails({ tournamentId }: TournamentDetailsProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { t, language } = useLanguage();
   const { data: auth } = useAuth();
   const isPublic = auth?.userRole === 'public';
   const canManageTournaments = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager';
@@ -82,8 +84,8 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
     if (isVideogameTournament && !newTeamTwitchChannel.trim()) {
       toast({
         variant: "destructive",
-        title: "Canal requerido",
-        description: "Agrega el canal de Twitch del participante",
+        title: t("channelRequired"),
+        description: t("twitchChannelRequiredDescription"),
       });
       return;
     }
@@ -101,12 +103,12 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
       setNewTeamColor("#000000");
       setNewTeamTwitchChannel("");
       setIsCreateTeamOpen(false);
-      toast({ title: "✓ Equipo creado e inscrito en el torneo" });
+      toast({ title: `✓ ${t("teamCreatedAndEnrolled")}` });
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -115,16 +117,16 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
     if (!selectedTeamId) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Selecciona un equipo",
+        title: t("error"),
+        description: t("selectTeam"),
       });
       return;
     }
     if (isVideogameTournament && !selectedTeamTwitchChannel.trim()) {
       toast({
         variant: "destructive",
-        title: "Canal requerido",
-        description: "Agrega el canal de Twitch del participante",
+        title: t("channelRequired"),
+        description: t("twitchChannelRequiredDescription"),
       });
       return;
     }
@@ -137,12 +139,12 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
       });
       setSelectedTeamId("");
       setSelectedTeamTwitchChannel("");
-      toast({ title: "✓ Equipo agregado" });
+      toast({ title: `✓ ${t("teamAdded")}` });
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -154,12 +156,12 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
         teamId,
       });
       setRemovingTeamId(null);
-      toast({ title: "✓ Equipo removido" });
+      toast({ title: `✓ ${t("teamRemoved")}` });
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -181,10 +183,10 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
           onClick={() => setLocation("/tournaments")}
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Volver
+          {t("goBack")}
         </Button>
         <Card className="p-8 text-center">
-          <p className="text-muted-foreground">Torneo no encontrado</p>
+          <p className="text-muted-foreground">{t("tournamentNotFound")}</p>
         </Card>
       </div>
     );
@@ -195,7 +197,7 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const availableTeams = teams?.filter((team) => !tournamentTeamIds.has(team.id)) || [];
 
   // fetch standings for this tournament
-  const standingsTitle = `${tournament.name} - Tabla de Posiciones`;
+  const standingsTitle = t("standingsTitle", { tournament: tournament.name });
 
   return (
     <div className="space-y-6">
@@ -207,7 +209,7 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
             onClick={() => setLocation("/tournaments")}
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver
+            {t("goBack")}
           </Button>
           <div>
             <h1 className="text-3xl font-bold">{tournament.name}</h1>
@@ -216,8 +218,12 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
             )}
           </div>
         </div>
-        <Badge variant={statusLabels[tournament.status]?.variant || "secondary"}>
-          {statusLabels[tournament.status]?.label || tournament.status}
+        <Badge variant={statusVariants[tournament.status] || "secondary"}>
+          {{
+            draft: t("draft"),
+            active: t("active"),
+            finished: t("finished"),
+          }[tournament.status] || tournament.status}
         </Badge>
       </div>
 
@@ -226,9 +232,9 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
           <div className="flex items-start gap-3">
             <Gamepad2 className="mt-0.5 h-5 w-5 text-primary" />
             <div>
-              <h2 className="font-display text-lg font-bold">Torneo de videojuego</h2>
+              <h2 className="font-display text-lg font-bold">{t("videogameTournament")}</h2>
               <p className="text-sm text-muted-foreground">
-                Cada participante debe tener canal de Twitch. Los partidos pueden mostrarse en directo desde esos canales.
+                {t("videogameTournamentDescription")}
               </p>
             </div>
           </div>
@@ -241,21 +247,21 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
       <Card className="p-6">
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
-            <p className="text-muted-foreground">Fecha de Inicio</p>
+            <p className="text-muted-foreground">{t("startDate")}</p>
             <p className="font-semibold">
-              {new Date(tournament.startDate).toLocaleDateString("es-ES")}
+              {new Date(tournament.startDate).toLocaleDateString(language === "es" ? "es-ES" : "en-US")}
             </p>
           </div>
           {tournament.endDate && (
             <div>
-              <p className="text-muted-foreground">Fecha de Finalización</p>
+              <p className="text-muted-foreground">{t("endDate")}</p>
               <p className="font-semibold">
-                {new Date(tournament.endDate).toLocaleDateString("es-ES")}
+                {new Date(tournament.endDate).toLocaleDateString(language === "es" ? "es-ES" : "en-US")}
               </p>
             </div>
           )}
           <div>
-            <p className="text-muted-foreground">Equipos</p>
+            <p className="text-muted-foreground">{t("teams")}</p>
             <p className="font-semibold">{tournamentTeams?.length || 0}</p>
           </div>
         </div>
@@ -263,33 +269,33 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
 
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-          <h2 className="text-2xl font-bold">Equipos Participantes</h2>
+          <h2 className="text-2xl font-bold">{t("participantTeams")}</h2>
           {canManageTournaments && (
             <div className="flex gap-2">
               <Dialog open={isCreateTeamOpen} onOpenChange={setIsCreateTeamOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
                     <Plus className="w-4 h-4 mr-2" />
-                    Nuevo Equipo
+                    {t("newTeam")}
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Nuevo equipo para {tournament.name}</DialogTitle>
+                    <DialogTitle>{t("newTeamForTournament", { tournament: tournament.name })}</DialogTitle>
                   </DialogHeader>
                   <form onSubmit={handleCreateTeam} className="space-y-4 mt-4">
                     <div className="space-y-2">
-                      <Label htmlFor="tournament-team-name">Nombre del equipo</Label>
+                      <Label htmlFor="tournament-team-name">{t("teamNameLower")}</Label>
                       <Input
                         id="tournament-team-name"
                         value={newTeamName}
                         onChange={(event) => setNewTeamName(event.target.value)}
-                        placeholder="Nombre del equipo"
+                        placeholder={t("teamNameLower")}
                         autoFocus
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="tournament-team-color">Color</Label>
+                      <Label htmlFor="tournament-team-color">{t("color")}</Label>
                       <div className="flex gap-3 items-center">
                         <Input
                           id="tournament-team-color"
@@ -306,7 +312,7 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                     {isVideogameTournament && (
                       <div className="space-y-2">
                         <Label htmlFor="tournament-team-twitch">
-                          Canal de Twitch *
+                          {t("twitchChannel")} *
                         </Label>
                         <Input
                           id="tournament-team-twitch"
@@ -314,7 +320,7 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                           onChange={(event) =>
                             setNewTeamTwitchChannel(event.target.value)
                           }
-                          placeholder="Ej. jugador_efootball"
+                          placeholder={t("twitchParticipantPlaceholder")}
                         />
                       </div>
                     )}
@@ -327,7 +333,7 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                         (isVideogameTournament && !newTeamTwitchChannel.trim())
                       }
                     >
-                      {createTeam.isPending ? "Creando..." : "Crear e inscribir equipo"}
+                      {createTeam.isPending ? t("creating") : t("createAndEnrollTeam")}
                     </Button>
                   </form>
                 </DialogContent>
@@ -338,12 +344,12 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                 disabled={(tournamentTeams?.length || 0) < 2}
                 title={
                   (tournamentTeams?.length || 0) < 2
-                    ? "Se necesitan al menos dos equipos inscritos"
-                    : "Programar partido"
+                    ? t("atLeastTwoTeamsNeeded")
+                    : t("scheduleMatch")
                 }
               >
                 <Calendar className="w-4 h-4 mr-2" />
-                Nuevo Partido
+                {t("scheduleNewMatch")}
               </Button>
             </div>
           )}
@@ -357,7 +363,7 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
 
         {tournamentTeams && tournamentTeams.length === 0 ? (
           <Card className="p-8 text-center">
-            <p className="text-muted-foreground mb-4">No hay equipos en este torneo</p>
+            <p className="text-muted-foreground mb-4">{t("noTeamsInTournament")}</p>
           </Card>
         ) : (
           <div className="grid gap-3">
@@ -369,7 +375,7 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                     <span className="font-semibold">{team.name}</span>
                     {isVideogameTournament && (
                       <p className="text-xs text-muted-foreground">
-                        Twitch: @{team.twitchChannel || "sin canal"}
+                        Twitch: @{team.twitchChannel || t("noChannel")}
                       </p>
                     )}
                   </div>
@@ -391,11 +397,11 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
 
       {canManageTournaments && availableTeams && availableTeams.length > 0 && (
         <Card className="p-6">
-          <h3 className="font-bold mb-4">Agregar Equipo</h3>
+          <h3 className="font-bold mb-4">{t("addTeam")}</h3>
           <div className="flex gap-2">
             <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Selecciona un equipo" />
+                <SelectValue placeholder={t("selectTeam")} />
               </SelectTrigger>
               <SelectContent>
                 {availableTeams.map((team) => (
@@ -418,21 +424,21 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
               ) : (
                 <>
                   <Plus className="w-4 h-4 mr-2" />
-                  Agregar
+                  {t("add")}
                 </>
               )}
             </Button>
           </div>
           {isVideogameTournament && (
             <div className="mt-4 space-y-2">
-              <Label htmlFor="existing-team-twitch">Canal de Twitch *</Label>
+              <Label htmlFor="existing-team-twitch">{t("twitchChannel")} *</Label>
               <Input
                 id="existing-team-twitch"
                 value={selectedTeamTwitchChannel}
                 onChange={(event) =>
                   setSelectedTeamTwitchChannel(event.target.value)
                 }
-                placeholder="Ej. jugador_efootball"
+                placeholder={t("twitchParticipantPlaceholder")}
               />
             </div>
           )}
@@ -445,18 +451,18 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remover Equipo</AlertDialogTitle>
+            <AlertDialogTitle>{t("removeTeam")}</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro que deseas remover este equipo del torneo?
+              {t("removeTeamDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex gap-2">
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => removingTeamId && handleRemoveTeam(removingTeamId)}
               className="bg-red-600 hover:bg-red-700"
             >
-              Remover
+              {t("remove")}
             </AlertDialogAction>
           </div>
         </AlertDialogContent>

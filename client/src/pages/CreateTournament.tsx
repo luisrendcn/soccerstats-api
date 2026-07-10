@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useLanguage } from "@/lib/i18n.tsx";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,7 @@ interface TournamentFormProps {
 export default function CreateTournament({ tournamentId }: TournamentFormProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const createTournament = useCreateTournament();
   const updateTournament = useUpdateTournament();
   const { data: existingTournament } = useTournament(tournamentId || 0);
@@ -61,8 +63,8 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
     if (!formData.name.trim()) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "El nombre del torneo es requerido",
+        title: t("error"),
+        description: t("tournamentNameRequired"),
       });
       return;
     }
@@ -70,8 +72,8 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
     if (!formData.startDate) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "La fecha de inicio es requerida",
+        title: t("error"),
+        description: t("startDateRequired"),
       });
       return;
     }
@@ -88,18 +90,18 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
 
       if (tournamentId) {
         await updateTournament.mutateAsync({ id: tournamentId, data });
-        toast({ title: "✓ Torneo actualizado" });
+        toast({ title: `✓ ${t("tournamentUpdated")}` });
       } else {
         await createTournament.mutateAsync(data as any);
-        toast({ title: "✓ Torneo creado exitosamente" });
+        toast({ title: `✓ ${t("tournamentCreated")}` });
       }
 
       setLocation("/tournaments");
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: (error as Error).message,
+        title: t("error"),
+        description: t("unexpectedError"),
       });
     }
   };
@@ -115,20 +117,20 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
           onClick={() => setLocation("/tournaments")}
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Volver
+          {t("goBack")}
         </Button>
         <h1 className="text-3xl font-bold">
-          {tournamentId ? "Editar Torneo" : "Crear Nuevo Torneo"}
+          {tournamentId ? t("editTournament") : t("createNewTournament")}
         </h1>
       </div>
 
       <Card className="p-8">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="name">Nombre del Torneo *</Label>
+            <Label htmlFor="name">{t("tournamentName")} *</Label>
             <Input
               id="name"
-              placeholder="ej: Campeonato Municipal 2026"
+              placeholder={t("tournamentNamePlaceholder")}
               value={formData.name}
               onChange={(e) =>
                 setFormData({ ...formData, name: e.target.value })
@@ -138,10 +140,10 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Descripción</Label>
+            <Label htmlFor="description">{t("description")}</Label>
             <Textarea
               id="description"
-              placeholder="Descripción del torneo (opcional)"
+              placeholder={t("tournamentDescriptionPlaceholder")}
               value={formData.description}
               onChange={(e) =>
                 setFormData({ ...formData, description: e.target.value })
@@ -151,7 +153,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="tournamentType">Tipo de torneo</Label>
+            <Label htmlFor="tournamentType">{t("tournamentType")}</Label>
             <Select
               value={formData.tournamentType}
               onValueChange={(value) =>
@@ -165,18 +167,18 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="soccer">Fútbol</SelectItem>
-                <SelectItem value="videogame">Videojuego / eFootball</SelectItem>
+                <SelectItem value="soccer">{t("soccer")}</SelectItem>
+                <SelectItem value="videogame">{t("videogameEfootball")}</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              En torneos de videojuego, cada participante inscrito debe tener canal de Twitch.
+              {t("videogameTournamentHint")}
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="startDate">Fecha de Inicio *</Label>
+              <Label htmlFor="startDate">{t("startDate")} *</Label>
               <Input
                 id="startDate"
                 type="date"
@@ -189,7 +191,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="endDate">Fecha de Finalización</Label>
+              <Label htmlFor="endDate">{t("endDate")}</Label>
               <Input
                 id="endDate"
                 type="date"
@@ -202,7 +204,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="status">Estado</Label>
+            <Label htmlFor="status">{t("status")}</Label>
             <Select
               value={formData.status}
               onValueChange={(value) =>
@@ -216,9 +218,9 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="draft">Borrador</SelectItem>
-                <SelectItem value="active">Activo</SelectItem>
-                <SelectItem value="finished">Finalizado</SelectItem>
+                <SelectItem value="draft">{t("draft")}</SelectItem>
+                <SelectItem value="active">{t("active")}</SelectItem>
+                <SelectItem value="finished">{t("finished")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -228,12 +230,12 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {tournamentId ? "Actualizando..." : "Creando..."}
+                  {tournamentId ? t("updating") : t("creating")}
                 </>
               ) : tournamentId ? (
-                "Actualizar Torneo"
+                t("updateTournament")
               ) : (
-                "Crear Torneo"
+                t("createTournament")
               )}
             </Button>
             <Button
@@ -241,7 +243,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
               variant="outline"
               onClick={() => setLocation("/tournaments")}
             >
-              Cancelar
+              {t("cancel")}
             </Button>
           </div>
         </form>

@@ -72,7 +72,7 @@ export default function Matches() {
   });
 
   const filterLabels: Record<'live' | 'all' | 'scheduled' | 'finished', string> = {
-    live: 'En vivo',
+    live: t("live"),
     all: t('all'),
     scheduled: t('scheduled'),
     finished: t('finished'),
@@ -87,10 +87,10 @@ export default function Matches() {
           <div>
             <h2 className="flex items-center gap-2 font-display text-lg font-bold">
               <Radio className="h-5 w-5 text-red-500" />
-              Partidos en vivo
+              {t("liveMatches")}
             </h2>
             <p className="text-sm text-muted-foreground">
-              Transmisiones de torneos y gameplays, por ejemplo eFootball, desde Twitch.
+              {t("liveMatchesDescription")}
             </p>
           </div>
           <span className="rounded-full bg-background px-3 py-1 text-xs font-bold text-primary shadow-sm">
@@ -105,7 +105,7 @@ export default function Matches() {
           </div>
         ) : (
           <p className="rounded-xl border border-dashed border-border bg-background/70 p-4 text-center text-sm text-muted-foreground">
-            Todavía no hay partidos en vivo. Al crear un partido puedes asociar un canal de Twitch.
+            {t("noLiveMatches")}
           </p>
         )}
       </div>
@@ -135,10 +135,10 @@ export default function Matches() {
           <div key={match.id} className="relative">
             <MatchCard match={match} />
             {canDeleteMatches && (
-              <button title="Delete match" className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
-                if (!confirm('Delete this match?')) return;
+              <button title={t("deleteMatch")} className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
+                if (!confirm(t("deleteMatchConfirm"))) return;
                 const response = await apiFetch(`/api/matches/${match.id}`, { method: "DELETE" });
-                if (!response.ok) throw new Error("Failed to delete match");
+                if (!response.ok) throw new Error(t("deleteMatchFailed"));
                 await refreshAppData(queryClient);
               }}>
                 <Trash className="w-4 h-4 text-red-600" />
@@ -151,7 +151,7 @@ export default function Matches() {
           <div className="text-center py-12">
             <p className="text-muted-foreground">{t('noMatches')}</p>
             <p className="text-sm text-muted-foreground mt-2">
-              Los partidos nuevos se programan desde el torneo correspondiente.
+              {t("newMatchesFromTournament")}
             </p>
           </div>
         )}
