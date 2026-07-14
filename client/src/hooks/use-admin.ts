@@ -21,6 +21,8 @@ export interface SafeRegistrationRequest
 
 export type EmailDelivery = {
   status: "sent" | "skipped" | "failed";
+  success?: boolean;
+  provider?: "gmail-api" | "smtp" | "none";
   message?: string;
 };
 

@@ -10,6 +10,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import path from "path";
 import { registerRoutes } from "./routes";
+import { getEmailProviderStatus } from "./email";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { db } from "./db";
@@ -32,6 +33,16 @@ const allowedOrigins = new Set(
     .map((origin) => origin.trim())
     .filter(Boolean),
 );
+
+const emailProviderStatus = getEmailProviderStatus();
+console.log(`Email provider configured: ${emailProviderStatus.provider}`);
+if (!emailProviderStatus.configured) {
+  console.warn(
+    `Email provider missing required variables: ${emailProviderStatus.missing.join(
+      ", ",
+    )}`,
+  );
+}
 
 if (isProduction) {
   app.set("trust proxy", 1);

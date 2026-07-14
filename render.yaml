@@ -22,8 +22,8 @@ services:
         value: 10000
       - key: APP_PUBLIC_BASE_URL
         value: https://soccer-stats-api.onrender.com
-      - key: EMAIL_DELIVERY_METHOD
-        value: gmail_api
+      - key: EMAIL_PROVIDER
+        value: gmail-api
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET

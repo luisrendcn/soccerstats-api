@@ -10,8 +10,32 @@ type MailMessage = {
 
 export type EmailDeliveryResult = {
   status: "sent" | "skipped" | "failed";
+  success: boolean;
+  provider: EmailProvider;
   message?: string;
 };
+
+type EmailProvider = "gmail-api" | "smtp" | "none";
+
+type EmailSendResult =
+  | {
+      provider: Exclude<EmailProvider, "none">;
+      response: unknown;
+    }
+  | {
+      provider: EmailProvider;
+      skipped: true;
+    };
+
+class EmailProviderError extends Error {
+  constructor(
+    public readonly provider: EmailProvider,
+    message: string,
+  ) {
+    super(message);
+    this.name = "EmailProviderError";
+  }
+}
 
 const appName = process.env.APP_NAME || "Soccer Stats";
 const appUrl =
@@ -20,8 +44,11 @@ const appUrl =
   "https://soccer-stats-api.onrender.com";
 
 function mailConfig() {
+  const emailUser = process.env.EMAIL_USER;
   return {
-    emailDeliveryMethod: process.env.EMAIL_DELIVERY_METHOD || "auto",
+    emailDeliveryMethod: normalizeEmailProvider(
+      process.env.EMAIL_PROVIDER || process.env.EMAIL_DELIVERY_METHOD,
+    ),
     emailHost: process.env.EMAIL_HOST || "smtp.gmail.com",
     emailPort: Number(process.env.EMAIL_PORT || 465),
     emailSecure: process.env.EMAIL_SECURE !== "false",
@@ -29,9 +56,9 @@ function mailConfig() {
     emailConnectionTimeoutMs: Number(
       process.env.EMAIL_CONNECTION_TIMEOUT_MS || 10_000,
     ),
-    emailUser: process.env.EMAIL_USER,
+    emailUser,
     emailPassword: process.env.EMAIL_PASSWORD,
-    emailFrom: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+    emailFrom: process.env.EMAIL_FROM || emailUser,
     googleClientId: process.env.GOOGLE_CLIENT_ID,
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
     googleRefreshToken: process.env.GOOGLE_REFRESH_TOKEN,
@@ -41,6 +68,10 @@ function mailConfig() {
 }
 
 export function isEmailConfigured() {
+  return getEmailProviderStatus().configured;
+}
+
+export function getEmailProviderStatus() {
   const {
     emailDeliveryMethod,
     emailHost,
@@ -52,8 +83,13 @@ export function isEmailConfigured() {
     googleClientSecret,
     googleRefreshToken,
   } = mailConfig();
+  const provider = selectedEmailProvider();
   const gmailApiConfigured = Boolean(
-    googleClientId && googleClientSecret && googleRefreshToken && emailFrom,
+    googleClientId &&
+      googleClientSecret &&
+      googleRefreshToken &&
+      emailUser &&
+      emailFrom,
   );
   const smtpConfigured = Boolean(
     emailHost &&
@@ -62,10 +98,36 @@ export function isEmailConfigured() {
       emailPassword &&
       emailFrom,
   );
-  return Boolean(
-    (emailDeliveryMethod !== "smtp" && gmailApiConfigured) ||
-      (emailDeliveryMethod !== "gmail_api" && smtpConfigured),
-  );
+
+  if (provider === "gmail-api") {
+    return {
+      provider,
+      configured: gmailApiConfigured,
+      missing: missingVars({
+        GOOGLE_CLIENT_ID: googleClientId,
+        GOOGLE_CLIENT_SECRET: googleClientSecret,
+        GOOGLE_REFRESH_TOKEN: googleRefreshToken,
+        EMAIL_USER: emailUser,
+        EMAIL_FROM: emailFrom,
+      }),
+    };
+  }
+
+  if (provider === "smtp") {
+    return {
+      provider,
+      configured: smtpConfigured,
+      missing: missingVars({
+        EMAIL_HOST: emailHost,
+        EMAIL_PORT: Number.isFinite(emailPort) ? String(emailPort) : undefined,
+        EMAIL_USER: emailUser,
+        EMAIL_PASSWORD: emailPassword,
+        EMAIL_FROM: emailFrom,
+      }),
+    };
+  }
+
+  return { provider, configured: false, missing: ["EMAIL_PROVIDER"] };
 }
 
 async function sendMail({ to, subject, text, html }: MailMessage) {
@@ -84,15 +146,17 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
     googleRefreshToken,
     googleGmailUser,
   } = mailConfig();
+  const provider = selectedEmailProvider();
 
   if (
-    emailDeliveryMethod !== "smtp" &&
+    provider === "gmail-api" &&
     googleClientId &&
     googleClientSecret &&
     googleRefreshToken &&
+    emailUser &&
     emailFrom
   ) {
-    return sendGmailApiMail({
+    const response = await sendGmailApiMail({
       clientId: googleClientId,
       clientSecret: googleClientSecret,
       refreshToken: googleRefreshToken,
@@ -103,17 +167,18 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
       text,
       html,
     });
+    return { provider: "gmail-api", response } satisfies EmailSendResult;
   }
 
   if (
-    emailDeliveryMethod !== "gmail_api" &&
+    provider === "smtp" &&
     emailHost &&
     Number.isFinite(emailPort) &&
     emailUser &&
     emailPassword &&
     emailFrom
   ) {
-    return sendSmtpMail({
+    const response = await sendSmtpMail({
       host: emailHost,
       port: emailPort,
       secure: emailSecure,
@@ -127,14 +192,43 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
       text,
       html,
     });
+    return { provider: "smtp", response } satisfies EmailSendResult;
   }
 
   {
+    const status = getEmailProviderStatus();
     console.warn(
-      `Email not sent to ${to}: configure Gmail API variables or choose a configured EMAIL_DELIVERY_METHOD.`,
+      `Email not sent to ${to}: ${status.provider} is missing ${status.missing.join(
+        ", ",
+      )}.`,
     );
-    return { skipped: true };
+    return { provider: status.provider, skipped: true } satisfies EmailSendResult;
   }
+}
+
+function selectedEmailProvider(): EmailProvider {
+  const { emailDeliveryMethod } = mailConfig();
+  if (emailDeliveryMethod === "gmail-api" || emailDeliveryMethod === "smtp") {
+    return emailDeliveryMethod;
+  }
+
+  const { googleClientId, googleClientSecret, googleRefreshToken } = mailConfig();
+  if (googleClientId && googleClientSecret && googleRefreshToken) {
+    return "gmail-api";
+  }
+  return "smtp";
+}
+
+function normalizeEmailProvider(value: string | undefined): "auto" | "gmail-api" | "smtp" {
+  const normalized = (value || "auto").trim().toLowerCase().replace("_", "-");
+  if (normalized === "gmail-api" || normalized === "smtp") return normalized;
+  return "auto";
+}
+
+function missingVars(vars: Record<string, unknown>) {
+  return Object.entries(vars)
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
 }
 
 async function sendGmailApiMail({
@@ -176,7 +270,10 @@ async function sendGmailApiMail({
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Gmail API send failed: ${response.status} ${detail}`);
+    throw new EmailProviderError(
+      "gmail-api",
+      `Gmail API send failed: ${response.status} ${detail}`,
+    );
   }
 
   return response.json();
@@ -205,12 +302,18 @@ async function getGmailAccessToken({
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Gmail API token failed: ${response.status} ${detail}`);
+    throw new EmailProviderError(
+      "gmail-api",
+      `Gmail API token failed: ${response.status} ${detail}`,
+    );
   }
 
   const payload = (await response.json()) as { access_token?: string };
   if (!payload.access_token) {
-    throw new Error("Gmail API token response did not include access_token");
+    throw new EmailProviderError(
+      "gmail-api",
+      "Gmail API token response did not include access_token",
+    );
   }
   return payload.access_token;
 }
@@ -382,7 +485,7 @@ export async function notifyAccessApproved(input: {
   const role = roleLabel(input.role);
   return sendMail({
     to: input.email,
-    subject: `Tu acceso a ${appName} fue aprobado`,
+    subject: `Tu cuenta de ${appName} fue aprobada`,
     text: `Hola ${input.name}. Tu cuenta fue aprobada como ${role}. Ya puedes iniciar sesion en ${appUrl} con el correo y la contrasena que registraste.`,
     html: baseTemplate(
       `Tu acceso fue aprobado`,
@@ -435,21 +538,29 @@ export async function trySendEmail(operation: string, send: () => Promise<unknow
     if (isSkippedEmail(result)) {
       return {
         status: "skipped",
+        success: false,
+        provider: result.provider,
         message:
           "El correo no se envio porque el proveedor de email no esta configurado.",
       } satisfies EmailDeliveryResult;
     }
-    return { status: "sent" } satisfies EmailDeliveryResult;
+    return {
+      status: "sent",
+      success: true,
+      provider: emailProviderFromResult(result),
+    } satisfies EmailDeliveryResult;
   } catch (error) {
     console.error(`Failed to send ${operation} email`, error);
     return {
       status: "failed",
+      success: false,
+      provider: emailProviderFromError(error),
       message: emailFailureMessage(error),
     } satisfies EmailDeliveryResult;
   }
 }
 
-function isSkippedEmail(result: unknown): result is { skipped: true } {
+function isSkippedEmail(result: unknown): result is { skipped: true; provider: EmailProvider } {
   return Boolean(
     result &&
       typeof result === "object" &&
@@ -458,8 +569,27 @@ function isSkippedEmail(result: unknown): result is { skipped: true } {
   );
 }
 
+function emailProviderFromResult(result: unknown): EmailProvider {
+  if (result && typeof result === "object" && "provider" in result) {
+    const provider = (result as { provider?: unknown }).provider;
+    if (provider === "gmail-api" || provider === "smtp") return provider;
+  }
+  return selectedEmailProvider();
+}
+
+function emailProviderFromError(error: unknown): EmailProvider {
+  if (error instanceof EmailProviderError) return error.provider;
+  return selectedEmailProvider();
+}
+
 function emailFailureMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("Gmail API token failed")) {
+    return "La cuenta fue aprobada, pero Gmail API rechazo la autenticacion OAuth. Revisa GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET y GOOGLE_REFRESH_TOKEN.";
+  }
+  if (message.includes("Gmail API send failed")) {
+    return "La cuenta fue aprobada, pero Gmail API no pudo enviar el correo. Revisa permisos OAuth de Gmail y el remitente configurado.";
+  }
   if (
     message.includes("Invalid login") ||
     message.includes("Username and Password not accepted") ||

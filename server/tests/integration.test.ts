@@ -722,12 +722,17 @@ describe('Authorization edge cases', () => {
   it('lets an admin approve a pending registration', async () => {
     const approve = vi.spyOn(storage, 'approveRegistrationRequest');
     const emailEnvKeys = [
+      'EMAIL_PROVIDER',
       'EMAIL_HOST',
       'EMAIL_PORT',
       'EMAIL_SECURE',
       'EMAIL_USER',
       'EMAIL_PASSWORD',
       'EMAIL_FROM',
+      'GOOGLE_CLIENT_ID',
+      'GOOGLE_CLIENT_SECRET',
+      'GOOGLE_REFRESH_TOKEN',
+      'GOOGLE_GMAIL_USER',
     ];
     const originalEmailEnv = new Map(
       emailEnvKeys.map((key) => [key, process.env[key]]),
@@ -746,6 +751,63 @@ describe('Authorization edge cases', () => {
       expect(res.body.emailDelivery.status).toBe('skipped');
       expect(approve).toHaveBeenCalledWith(12, 1);
     } finally {
+      for (const [key, value] of originalEmailEnv) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    }
+  });
+
+  it('keeps approval successful when Gmail API notification fails', async () => {
+    const approve = vi.spyOn(storage, 'approveRegistrationRequest');
+    const originalFetch = global.fetch;
+    const emailEnvKeys = [
+      'EMAIL_PROVIDER',
+      'EMAIL_USER',
+      'EMAIL_FROM',
+      'GOOGLE_CLIENT_ID',
+      'GOOGLE_CLIENT_SECRET',
+      'GOOGLE_REFRESH_TOKEN',
+      'GOOGLE_GMAIL_USER',
+    ];
+    const originalEmailEnv = new Map(
+      emailEnvKeys.map((key) => [key, process.env[key]]),
+    );
+    process.env.EMAIL_PROVIDER = 'gmail-api';
+    process.env.EMAIL_USER = 'soccerstats.notification@gmail.com';
+    process.env.EMAIL_FROM = 'Soccer Stats <soccerstats.notification@gmail.com>';
+    process.env.GOOGLE_CLIENT_ID = 'test-client-id';
+    process.env.GOOGLE_CLIENT_SECRET = 'test-client-secret';
+    process.env.GOOGLE_REFRESH_TOKEN = 'test-refresh-token';
+    process.env.GOOGLE_GMAIL_USER = 'me';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => '{"error":"invalid_grant"}',
+      }),
+    );
+
+    try {
+      const res = await request(app)
+        .post('/api/admin/registration-requests/12/approve');
+
+      expect(res.status).toBe(201);
+      expect(res.body.email).toBe('approved@example.com');
+      expect(res.body.emailDelivery).toMatchObject({
+        status: 'failed',
+        success: false,
+        provider: 'gmail-api',
+      });
+      expect(JSON.stringify(res.body)).not.toContain('test-client-secret');
+      expect(JSON.stringify(res.body)).not.toContain('test-refresh-token');
+      expect(approve).toHaveBeenCalledWith(12, 1);
+    } finally {
+      vi.stubGlobal('fetch', originalFetch);
       for (const [key, value] of originalEmailEnv) {
         if (value === undefined) {
           delete process.env[key];
