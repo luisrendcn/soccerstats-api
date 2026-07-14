@@ -21,6 +21,7 @@ const appUrl =
 
 function mailConfig() {
   return {
+    emailDeliveryMethod: process.env.EMAIL_DELIVERY_METHOD || "auto",
     emailHost: process.env.EMAIL_HOST || "smtp.gmail.com",
     emailPort: Number(process.env.EMAIL_PORT || 465),
     emailSecure: process.env.EMAIL_SECURE !== "false",
@@ -31,20 +32,45 @@ function mailConfig() {
     emailUser: process.env.EMAIL_USER,
     emailPassword: process.env.EMAIL_PASSWORD,
     emailFrom: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+    googleClientId: process.env.GOOGLE_CLIENT_ID,
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    googleRefreshToken: process.env.GOOGLE_REFRESH_TOKEN,
+    googleGmailUser: process.env.GOOGLE_GMAIL_USER || "me",
     adminNotifyEmail: process.env.ADMIN_NOTIFY_EMAIL,
   };
 }
 
 export function isEmailConfigured() {
-  const { emailHost, emailPort, emailUser, emailPassword, emailFrom } =
-    mailConfig();
+  const {
+    emailDeliveryMethod,
+    emailHost,
+    emailPort,
+    emailUser,
+    emailPassword,
+    emailFrom,
+    googleClientId,
+    googleClientSecret,
+    googleRefreshToken,
+  } = mailConfig();
+  const gmailApiConfigured = Boolean(
+    googleClientId && googleClientSecret && googleRefreshToken && emailFrom,
+  );
+  const smtpConfigured = Boolean(
+    emailHost &&
+      Number.isFinite(emailPort) &&
+      emailUser &&
+      emailPassword &&
+      emailFrom,
+  );
   return Boolean(
-    emailHost && Number.isFinite(emailPort) && emailUser && emailPassword && emailFrom,
+    (emailDeliveryMethod !== "smtp" && gmailApiConfigured) ||
+      (emailDeliveryMethod !== "gmail_api" && smtpConfigured),
   );
 }
 
 async function sendMail({ to, subject, text, html }: MailMessage) {
   const {
+    emailDeliveryMethod,
     emailHost,
     emailPort,
     emailSecure,
@@ -53,9 +79,40 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
     emailUser,
     emailPassword,
     emailFrom,
+    googleClientId,
+    googleClientSecret,
+    googleRefreshToken,
+    googleGmailUser,
   } = mailConfig();
 
-  if (emailHost && Number.isFinite(emailPort) && emailUser && emailPassword && emailFrom) {
+  if (
+    emailDeliveryMethod !== "smtp" &&
+    googleClientId &&
+    googleClientSecret &&
+    googleRefreshToken &&
+    emailFrom
+  ) {
+    return sendGmailApiMail({
+      clientId: googleClientId,
+      clientSecret: googleClientSecret,
+      refreshToken: googleRefreshToken,
+      gmailUser: googleGmailUser,
+      from: emailFrom,
+      to,
+      subject,
+      text,
+      html,
+    });
+  }
+
+  if (
+    emailDeliveryMethod !== "gmail_api" &&
+    emailHost &&
+    Number.isFinite(emailPort) &&
+    emailUser &&
+    emailPassword &&
+    emailFrom
+  ) {
     return sendSmtpMail({
       host: emailHost,
       port: emailPort,
@@ -74,10 +131,141 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
 
   {
     console.warn(
-      `Email not sent to ${to}: configure EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD and EMAIL_FROM.`,
+      `Email not sent to ${to}: configure Gmail API variables or choose a configured EMAIL_DELIVERY_METHOD.`,
     );
     return { skipped: true };
   }
+}
+
+async function sendGmailApiMail({
+  clientId,
+  clientSecret,
+  refreshToken,
+  gmailUser,
+  from,
+  to,
+  subject,
+  text,
+  html,
+}: MailMessage & {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  gmailUser: string;
+  from: string;
+}) {
+  const accessToken = await getGmailAccessToken({
+    clientId,
+    clientSecret,
+    refreshToken,
+  });
+  const raw = buildRawEmail({ from, to, subject, text, html });
+  const response = await fetch(
+    `https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(
+      gmailUser,
+    )}/messages/send`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ raw }),
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Gmail API send failed: ${response.status} ${detail}`);
+  }
+
+  return response.json();
+}
+
+async function getGmailAccessToken({
+  clientId,
+  clientSecret,
+  refreshToken,
+}: {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+}) {
+  const body = new URLSearchParams();
+  body.set("client_id", clientId);
+  body.set("client_secret", clientSecret);
+  body.set("refresh_token", refreshToken);
+  body.set("grant_type", "refresh_token");
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Gmail API token failed: ${response.status} ${detail}`);
+  }
+
+  const payload = (await response.json()) as { access_token?: string };
+  if (!payload.access_token) {
+    throw new Error("Gmail API token response did not include access_token");
+  }
+  return payload.access_token;
+}
+
+function buildRawEmail({ from, to, subject, text, html }: MailMessage & { from: string }) {
+  const boundary = `soccer-stats-${Date.now().toString(36)}`;
+  const headers = [
+    `From: ${sanitizeHeader(from)}`,
+    `To: ${sanitizeHeader(to)}`,
+    `Subject: ${encodeHeader(subject)}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+  ];
+  const parts = [
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    toBase64Lines(text),
+  ];
+
+  if (html) {
+    parts.push(
+      `--${boundary}`,
+      'Content-Type: text/html; charset="UTF-8"',
+      "Content-Transfer-Encoding: base64",
+      "",
+      toBase64Lines(html),
+    );
+  }
+
+  parts.push(`--${boundary}--`, "");
+  const message = [...headers, "", ...parts].join("\r\n");
+  return Buffer.from(message)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function sanitizeHeader(value: string) {
+  return value.replace(/[\r\n]+/g, " ").trim();
+}
+
+function encodeHeader(value: string) {
+  return `=?UTF-8?B?${Buffer.from(sanitizeHeader(value), "utf8").toString(
+    "base64",
+  )}?=`;
+}
+
+function toBase64Lines(value: string) {
+  return Buffer.from(value, "utf8")
+    .toString("base64")
+    .replace(/.{1,76}/g, "$&\r\n")
+    .trim();
 }
 
 async function sendSmtpMail({
