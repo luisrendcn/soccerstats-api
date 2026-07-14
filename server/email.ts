@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
 type MailMessage = {
   to: string;
@@ -23,6 +24,10 @@ function mailConfig() {
     emailHost: process.env.EMAIL_HOST || "smtp.gmail.com",
     emailPort: Number(process.env.EMAIL_PORT || 465),
     emailSecure: process.env.EMAIL_SECURE !== "false",
+    emailForceIpv4: process.env.EMAIL_FORCE_IPV4 !== "false",
+    emailConnectionTimeoutMs: Number(
+      process.env.EMAIL_CONNECTION_TIMEOUT_MS || 10_000,
+    ),
     emailUser: process.env.EMAIL_USER,
     emailPassword: process.env.EMAIL_PASSWORD,
     emailFrom: process.env.EMAIL_FROM || process.env.EMAIL_USER,
@@ -43,6 +48,8 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
     emailHost,
     emailPort,
     emailSecure,
+    emailForceIpv4,
+    emailConnectionTimeoutMs,
     emailUser,
     emailPassword,
     emailFrom,
@@ -53,6 +60,8 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
       host: emailHost,
       port: emailPort,
       secure: emailSecure,
+      forceIpv4: emailForceIpv4,
+      connectionTimeoutMs: emailConnectionTimeoutMs,
       user: emailUser,
       password: emailPassword,
       from: emailFrom,
@@ -75,6 +84,8 @@ async function sendSmtpMail({
   host,
   port,
   secure,
+  forceIpv4,
+  connectionTimeoutMs,
   user,
   password,
   from,
@@ -86,19 +97,27 @@ async function sendSmtpMail({
   host: string;
   port: number;
   secure: boolean;
+  forceIpv4: boolean;
+  connectionTimeoutMs: number;
   user: string;
   password: string;
   from: string;
 }) {
-  const transporter = nodemailer.createTransport({
+  const transportOptions: SMTPTransport.Options & { family?: 4 | 6 } = {
     host,
     port,
     secure,
+    family: forceIpv4 ? 4 : undefined,
+    connectionTimeout: connectionTimeoutMs,
+    greetingTimeout: connectionTimeoutMs,
+    socketTimeout: connectionTimeoutMs,
     auth: {
       user,
       pass: password,
     },
-  });
+  };
+
+  const transporter = nodemailer.createTransport(transportOptions);
 
   return transporter.sendMail({
     from,
@@ -259,6 +278,13 @@ function emailFailureMessage(error: unknown) {
     message.includes("535")
   ) {
     return "La cuenta fue aprobada, pero Gmail rechazo el envio. Verifica que EMAIL_USER use una cuenta Gmail valida y que EMAIL_PASSWORD sea una contrasena de aplicacion.";
+  }
+  if (
+    message.includes("Connection timeout") ||
+    message.includes("ETIMEDOUT") ||
+    message.includes("ENETUNREACH")
+  ) {
+    return "La cuenta fue aprobada, pero Render no pudo conectarse a Gmail SMTP. En servicios free de Render los puertos SMTP 25, 465 y 587 pueden estar bloqueados; cambia el servicio a un plan pago o usa un proveedor con API HTTP.";
   }
   return "La cuenta fue aprobada, pero no se pudo enviar el correo de notificacion. Revisa la configuracion SMTP de Gmail.";
 }

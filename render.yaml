@@ -28,6 +28,10 @@ services:
         value: "465"
       - key: EMAIL_SECURE
         value: "true"
+      - key: EMAIL_FORCE_IPV4
+        value: "true"
+      - key: EMAIL_CONNECTION_TIMEOUT_MS
+        value: "10000"
       - key: EMAIL_USER
         sync: false
       - key: EMAIL_PASSWORD
