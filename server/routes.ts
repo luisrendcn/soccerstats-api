@@ -205,6 +205,73 @@ function isVideogameTournamentTeam(team?: {
   return team?.isVideogameTournamentTeam === true;
 }
 
+const hexColorSchema = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, "El color debe estar en formato HEX, por ejemplo #1d4ed8");
+
+const importTournamentTeamsSchema = z.object({
+  teams: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1, "El nombre del equipo es requerido").max(100),
+        color: z
+          .string()
+          .trim()
+          .optional()
+          .transform((value) => value || "#000000")
+          .pipe(hexColorSchema),
+        twitchChannel: z.string().trim().optional().nullable(),
+      }),
+    )
+    .min(1, "El archivo no contiene equipos válidos")
+    .max(200, "Puedes importar máximo 200 equipos por archivo"),
+});
+
+const importPlayersSchema = z.object({
+  players: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1, "El nombre del jugador es requerido").max(100),
+        number: z.number().int().min(0).max(999).optional().nullable(),
+      }),
+    )
+    .min(1, "El archivo no contiene jugadores válidos")
+    .max(500, "Puedes importar máximo 500 jugadores por archivo"),
+});
+
+const generateTournamentMatchesSchema = z.object({
+  startAt: z.string().datetime("La fecha inicial del calendario es requerida"),
+  intervalDays: z.number().int().min(0).max(30).default(7),
+  location: z.string().trim().max(120).optional().nullable(),
+});
+
+function normalizeName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function buildRoundRobinPairs(teamIds: number[]) {
+  const rotation = [...teamIds];
+  const rounds: Array<Array<{ homeTeamId: number; awayTeamId: number }>> = [];
+
+  for (let round = 0; round < teamIds.length - 1; round += 1) {
+    const pairs: Array<{ homeTeamId: number; awayTeamId: number }> = [];
+    for (let index = 0; index < teamIds.length / 2; index += 1) {
+      const first = rotation[index];
+      const second = rotation[rotation.length - 1 - index];
+      pairs.push(
+        round % 2 === 0
+          ? { homeTeamId: first, awayTeamId: second }
+          : { homeTeamId: second, awayTeamId: first },
+      );
+    }
+    rounds.push(pairs);
+    rotation.splice(1, 0, rotation.pop()!);
+  }
+
+  return rounds;
+}
+
 async function establishSession(
   req: Request,
   user: { id: number; role: string; teamId?: number | null },
@@ -823,6 +890,20 @@ export async function registerRoutes(
       if (updateData.endDate && typeof updateData.endDate === "string") {
         updateData.endDate = new Date(updateData.endDate);
       }
+      if (updateData.status === "active") {
+        const tournamentTeams = await storage.getTournamentTeams(tournamentId);
+        if (tournamentTeams.length < 2) {
+          return res.status(400).json({
+            message: "Para iniciar un torneo se necesitan al menos dos equipos inscritos",
+          });
+        }
+        if (tournamentTeams.length % 2 !== 0) {
+          return res.status(400).json({
+            message:
+              "No se puede iniciar el torneo con una cantidad impar de equipos",
+          });
+        }
+      }
 
       const tournament = await storage.updateTournament(tournamentId, updateData);
       res.json(tournament);
@@ -901,6 +982,104 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/tournaments/:id/teams/import", requireTournamentManager, async (req, res) => {
+    try {
+      const tournamentId = Number(req.params.id);
+      const tournament = await getManageableTournament(req, res, tournamentId);
+      if (!tournament) return;
+
+      const input = importTournamentTeamsSchema.parse(req.body);
+      const existingTournamentTeams = await storage.getTournamentTeams(tournamentId);
+      const enrolledIds = new Set(existingTournamentTeams.map((team) => team.id));
+      const enrolledNames = new Set(
+        existingTournamentTeams.map((team) => normalizeName(team.name)),
+      );
+      const allTeams = await storage.getTeams();
+      const teamsByName = new Map<string, any>(
+        allTeams.map((team) => [normalizeName(team.name), team]),
+      );
+      const seenFileNames = new Set<string>();
+      const result = {
+        created: [] as any[],
+        enrolledExisting: [] as any[],
+        skipped: [] as Array<{ row: number; name: string; reason: string }>,
+      };
+
+      for (const [index, row] of input.teams.entries()) {
+        const rowNumber = index + 2;
+        const normalizedName = normalizeName(row.name);
+        if (seenFileNames.has(normalizedName)) {
+          result.skipped.push({
+            row: rowNumber,
+            name: row.name,
+            reason: "Equipo duplicado dentro del archivo",
+          });
+          continue;
+        }
+        seenFileNames.add(normalizedName);
+
+        const channel = normalizeTwitchChannel(row.twitchChannel);
+        if (tournament.tournamentType === "videogame" && !isValidTwitchChannel(channel)) {
+          result.skipped.push({
+            row: rowNumber,
+            name: row.name,
+            reason: "Falta un canal de Twitch válido",
+          });
+          continue;
+        }
+        if (channel && !isValidTwitchChannel(channel)) {
+          result.skipped.push({
+            row: rowNumber,
+            name: row.name,
+            reason: "El canal de Twitch no es válido",
+          });
+          continue;
+        }
+
+        const existingTeam = teamsByName.get(normalizedName);
+        if (existingTeam) {
+          if (enrolledIds.has(existingTeam.id) || enrolledNames.has(normalizedName)) {
+            result.skipped.push({
+              row: rowNumber,
+              name: row.name,
+              reason: "El equipo ya está inscrito en este torneo",
+            });
+            continue;
+          }
+          const relation = await storage.addTeamToTournament(tournamentId, existingTeam.id, {
+            twitchChannel: channel || null,
+          });
+          enrolledIds.add(existingTeam.id);
+          enrolledNames.add(normalizedName);
+          result.enrolledExisting.push({
+            ...existingTeam,
+            twitchChannel: relation.twitchChannel ?? null,
+          });
+          continue;
+        }
+
+        const team = await storage.createTeam({
+          name: row.name.trim(),
+          color: row.color,
+        });
+        const relation = await storage.addTeamToTournament(tournamentId, team.id, {
+          twitchChannel: channel || null,
+        });
+        teamsByName.set(normalizedName, team);
+        enrolledIds.add(team.id);
+        enrolledNames.add(normalizedName);
+        result.created.push({ ...team, twitchChannel: relation.twitchChannel ?? null });
+      }
+
+      res.status(201).json(result);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.issues[0].message });
+      }
+      throw err;
+    }
+  });
+
   app.delete("/api/tournaments/:id/teams/:teamId", requireTournamentManager, async (req, res) => {
     try {
       const tournamentId = Number(req.params.id);
@@ -922,6 +1101,93 @@ export async function registerRoutes(
       const teams = await storage.getTournamentTeams(tournamentId);
       res.json(teams);
     } catch (err) {
+      throw err;
+    }
+  });
+
+  app.post("/api/tournaments/:id/matches/generate", requireTournamentManager, async (req, res) => {
+    try {
+      const tournamentId = Number(req.params.id);
+      const tournament = await getManageableTournament(req, res, tournamentId);
+      if (!tournament) return;
+
+      const input = generateTournamentMatchesSchema.parse(req.body);
+      const tournamentTeams = await storage.getTournamentTeams(tournamentId);
+      if (tournamentTeams.length < 2) {
+        return res.status(400).json({
+          message: "Se necesitan al menos dos equipos inscritos para generar partidos",
+        });
+      }
+      if (tournamentTeams.length % 2 !== 0) {
+        return res.status(400).json({
+          message:
+            "No se puede iniciar el torneo con una cantidad impar de equipos",
+        });
+      }
+      if (
+        tournament.tournamentType === "videogame" &&
+        tournamentTeams.some((team) => !isValidTwitchChannel(team.twitchChannel))
+      ) {
+        return res.status(400).json({
+          message:
+            "Todos los participantes de videojuego deben tener canal de Twitch antes de generar partidos",
+        });
+      }
+
+      const existingMatches = (await storage.getMatches()).filter(
+        (match) => match.tournamentId === tournamentId,
+      );
+      if (existingMatches.length > 0) {
+        return res.status(409).json({
+          message:
+            "Este torneo ya tiene partidos creados. Elimina la programación existente antes de regenerarla.",
+        });
+      }
+
+      const teamById = new Map(tournamentTeams.map((team) => [team.id, team]));
+      const rounds = buildRoundRobinPairs(tournamentTeams.map((team) => team.id));
+      const startAt = new Date(input.startAt);
+      const createdMatches = [];
+
+      for (const [roundIndex, round] of rounds.entries()) {
+        const roundDate = new Date(startAt);
+        roundDate.setDate(startAt.getDate() + roundIndex * input.intervalDays);
+
+        for (const pair of round) {
+          const homeTeam = teamById.get(pair.homeTeamId);
+          const matchInput = {
+            ...pair,
+            tournamentId,
+            date: roundDate,
+            location: input.location || null,
+            status: "scheduled",
+            streamPlatform:
+              tournament.tournamentType === "videogame" ? "twitch" : null,
+            streamChannel:
+              tournament.tournamentType === "videogame"
+                ? homeTeam?.twitchChannel || null
+                : null,
+            streamUrl:
+              tournament.tournamentType === "videogame"
+                ? buildTwitchUrl(homeTeam?.twitchChannel)
+                : null,
+          };
+          createdMatches.push(await storage.createMatch(matchInput));
+        }
+      }
+
+      if (tournament.status === "draft") {
+        await storage.updateTournament(tournamentId, { status: "active" } as any);
+      }
+
+      res.status(201).json({
+        rounds: rounds.length,
+        matches: createdMatches,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.issues[0].message });
+      }
       throw err;
     }
   });
@@ -983,6 +1249,79 @@ export async function registerRoutes(
       }
       const player = await storage.createPlayer(input);
       res.status(201).json(player);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.issues[0].message });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/teams/:teamId/players/import", requirePermission("players", "create"), async (req, res) => {
+    try {
+      const teamId = Number(req.params.teamId);
+      const team = await storage.getTeam(teamId);
+      if (!team) {
+        return res.status(404).json({ message: "Equipo no encontrado" });
+      }
+      if (isVideogameTournamentTeam(team)) {
+        return res.status(400).json({
+          message:
+            "Los equipos de torneos de videojuego no manejan jugadores ni alineación",
+        });
+      }
+
+      const userRole = (req.session as any).userRole;
+      if (isTeamCaptainRole(userRole)) {
+        const myTeam = (req.session as any).teamId;
+        if (teamId !== myTeam) {
+          return res.status(403).json({ message: "No puedes crear jugadores para otro equipo" });
+        }
+      }
+
+      const input = importPlayersSchema.parse(req.body);
+      const existingPlayers = await storage.getPlayers(teamId);
+      const existingNames = new Set(
+        existingPlayers.map((player) => normalizeName(player.name)),
+      );
+      const seenFileNames = new Set<string>();
+      const result = {
+        created: [] as any[],
+        skipped: [] as Array<{ row: number; name: string; reason: string }>,
+      };
+
+      for (const [index, row] of input.players.entries()) {
+        const rowNumber = index + 2;
+        const normalizedName = normalizeName(row.name);
+        if (seenFileNames.has(normalizedName)) {
+          result.skipped.push({
+            row: rowNumber,
+            name: row.name,
+            reason: "Jugador duplicado dentro del archivo",
+          });
+          continue;
+        }
+        seenFileNames.add(normalizedName);
+
+        if (existingNames.has(normalizedName)) {
+          result.skipped.push({
+            row: rowNumber,
+            name: row.name,
+            reason: "El jugador ya existe en este equipo",
+          });
+          continue;
+        }
+
+        const player = await storage.createPlayer({
+          teamId,
+          name: row.name.trim(),
+          number: row.number ?? null,
+        });
+        existingNames.add(normalizedName);
+        result.created.push(player);
+      }
+
+      res.status(201).json(result);
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.issues[0].message });

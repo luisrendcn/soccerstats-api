@@ -15,10 +15,10 @@
     "test:real-db": "cross-env RUN_REAL_DB_TESTS=true vitest run --root . server/tests/real-db.test.ts",
     "check": "tsc --noEmit",
     "db:push": "drizzle-kit push",
-    "cap:sync": "npm run build && npx cap sync android",
+    "cap:sync": "cross-env VITE_API_BASE=https://soccer-stats-api.onrender.com npm run build && npx cap sync android",
     "cap:open": "npx cap open android",
-    "apk:debug": "npm run cap:sync && cd android && ./gradlew.bat assembleDebug && cd ..",
-    "apk:release": "npm run cap:sync && cd android && ./gradlew.bat assembleRelease && cd .."
+    "apk:debug": "npm run cap:sync && cd android && gradlew.bat assembleDebug && cd ..",
+    "apk:release": "npm run cap:sync && cd android && gradlew.bat assembleRelease && cd .."
   },
   "dependencies": {
     "@capacitor/android": "^8.4.0",
@@ -85,6 +85,7 @@
     "react-hook-form": "^7.55.0",
     "react-icons": "^5.4.0",
     "react-resizable-panels": "^2.1.7",
+    "read-excel-file": "^9.3.1",
     "recharts": "^2.15.2",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",

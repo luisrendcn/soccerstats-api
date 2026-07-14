@@ -114,3 +114,34 @@ export function useCreatePlayer() {
     onSuccess: () => refreshAppData(queryClient),
   });
 }
+
+export type PlayersImportResult = {
+  created: Array<{ id: number; teamId: number; name: string; number?: number | null }>;
+  skipped: Array<{ row: number; name: string; reason: string }>;
+};
+
+export function useImportTeamPlayers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      teamId,
+      players,
+    }: {
+      teamId: number;
+      players: Array<{ name: string; number?: number | null }>;
+    }) => {
+      const res = await apiFetch(`/api/teams/${teamId}/players/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ players }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to import players");
+      }
+      return res.json() as Promise<PlayersImportResult>;
+    },
+    onSuccess: () => refreshAppData(queryClient),
+  });
+}

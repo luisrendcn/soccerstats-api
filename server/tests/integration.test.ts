@@ -284,6 +284,26 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     }
   });
 
+  it('imports players in bulk and skips players already on the roster', async () => {
+    const createPlayer = vi.spyOn(storage, 'createPlayer');
+
+    const res = await request(app)
+      .post('/api/teams/1/players/import')
+      .send({
+        players: [
+          { name: 'P1', number: 9 },
+          { name: 'New Player', number: 10 },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.created).toHaveLength(1);
+    expect(res.body.skipped).toHaveLength(1);
+    expect(createPlayer).toHaveBeenCalledWith(
+      expect.objectContaining({ teamId: 1, name: 'New Player', number: 10 }),
+    );
+  });
+
   it('referee role cannot create teams or matches even if permission function is stubbed', async () => {
     const refApp = buildApp('referee');
     // force allow according to hasPermission, ownership check should still block some actions
@@ -353,6 +373,31 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(created.body.twitchChannel).toBe('player_one');
   });
 
+  it('imports tournament teams in bulk and skips duplicates', async () => {
+    vi.spyOn(storage, 'getTournamentTeams').mockResolvedValueOnce([] as any);
+    const createTeam = vi.spyOn(storage, 'createTeam');
+    const enrollTeam = vi.spyOn(storage, 'addTeamToTournament');
+
+    const res = await request(app)
+      .post('/api/tournaments/42/teams/import')
+      .send({
+        teams: [
+          { name: 'Team A', color: '#111111' },
+          { name: 'Imported FC', color: '#222222' },
+          { name: 'Imported FC', color: '#333333' },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.enrolledExisting).toHaveLength(1);
+    expect(res.body.created).toHaveLength(1);
+    expect(res.body.skipped).toHaveLength(1);
+    expect(createTeam).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Imported FC' }),
+    );
+    expect(enrollTeam).toHaveBeenCalledWith(42, 1, { twitchChannel: null });
+  });
+
   it('lets a tournament manager manage tournaments they created', async () => {
     const managerApp = buildApp('tournament_manager');
     vi.spyOn(storage, 'getTournamentById').mockResolvedValueOnce({
@@ -408,6 +453,48 @@ describe('Integration: basic endpoints (mocked storage)', () => {
       date: new Date().toISOString(),
     });
     expect(invalid.status).toBe(400);
+  });
+
+  it('generates a full round-robin schedule for an even number of teams', async () => {
+    vi.spyOn(storage, 'getTournamentTeams').mockResolvedValueOnce([
+      { id: 1, name: 'Team A' },
+      { id: 2, name: 'Team B' },
+      { id: 3, name: 'Team C' },
+      { id: 4, name: 'Team D' },
+    ] as any);
+    vi.spyOn(storage, 'getMatches').mockResolvedValueOnce([]);
+    const createMatch = vi.spyOn(storage, 'createMatch');
+
+    const res = await request(app)
+      .post('/api/tournaments/42/matches/generate')
+      .send({
+        startAt: new Date('2026-07-20T15:00:00.000Z').toISOString(),
+        intervalDays: 7,
+        location: 'Main Field',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.rounds).toBe(3);
+    expect(res.body.matches).toHaveLength(6);
+    expect(createMatch).toHaveBeenCalledTimes(6);
+  });
+
+  it('blocks automatic schedule generation with an odd number of teams', async () => {
+    vi.spyOn(storage, 'getTournamentTeams').mockResolvedValueOnce([
+      { id: 1, name: 'Team A' },
+      { id: 2, name: 'Team B' },
+      { id: 3, name: 'Team C' },
+    ] as any);
+
+    const res = await request(app)
+      .post('/api/tournaments/42/matches/generate')
+      .send({
+        startAt: new Date('2026-07-20T15:00:00.000Z').toISOString(),
+        intervalDays: 7,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('impar');
   });
 
   it('rejects goals for a team that is not in the match', async () => {

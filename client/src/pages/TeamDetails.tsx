@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useRoute } from "wouter";
-import { useTeam, useTeamPlayers, useCreatePlayer } from "@/hooks/use-teams";
+import { useTeam, useTeamPlayers, useCreatePlayer, useImportTeamPlayers } from "@/hooks/use-teams";
 import { Layout } from "@/components/Layout";
 import { TeamColorCircleSmall } from "@/components/TeamColor";
-import { Gamepad2, Loader2, Radio, UserPlus, Shirt, Trash } from "lucide-react";
+import { FileUp, Gamepad2, Loader2, Radio, UserPlus, Shirt, Trash } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
 import { useLanguage } from "@/lib/i18n.tsx";
+import { parsePlayerImportFile } from "@/lib/spreadsheet-import";
 
 export default function TeamDetails() {
   const [match, params] = useRoute("/teams/:id");
@@ -36,7 +37,10 @@ export default function TeamDetails() {
   const { t } = useLanguage();
   
   const createPlayer = useCreatePlayer();
+  const importPlayers = useImportTeamPlayers();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [playersFile, setPlayersFile] = useState<File | null>(null);
   const [playerName, setPlayerName] = useState("");
   const [playerNumber, setPlayerNumber] = useState("");
   const { data: auth } = useAuth();
@@ -60,6 +64,49 @@ export default function TeamDetails() {
       setIsDialogOpen(false);
     } catch (err) {
       toast({ variant: "destructive", title: t("error"), description: t("unexpectedError") });
+    }
+  };
+
+  const handleImportPlayers = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!playersFile) {
+      toast({
+        variant: "destructive",
+        title: t("error"),
+        description: t("chooseExcelFile"),
+      });
+      return;
+    }
+
+    try {
+      const importedPlayers = await parsePlayerImportFile(playersFile);
+      if (importedPlayers.length === 0) {
+        toast({
+          variant: "destructive",
+          title: t("error"),
+          description: t("noRowsFound"),
+        });
+        return;
+      }
+      const result = await importPlayers.mutateAsync({
+        teamId,
+        players: importedPlayers,
+      });
+      toast({
+        title: t("playersImported"),
+        description: t("playersImportedDescription", {
+          count: result.created.length,
+          skipped: result.skipped.length,
+        }),
+      });
+      setPlayersFile(null);
+      setIsImportDialogOpen(false);
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: t("error"),
+        description: err instanceof Error ? err.message : t("unexpectedError"),
+      });
     }
   };
 
@@ -118,42 +165,86 @@ export default function TeamDetails() {
           <h2 className="text-lg font-display">{t("activeRoster")}</h2>
           
           {canManagePlayers && (
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="gap-2 rounded-full">
-                  <UserPlus className="w-4 h-4" /> {t("addPlayer")}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>{t("addPlayerToTeam", { team: team.name })}</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleAddPlayer} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">{t("playerName")}</Label>
-                    <Input 
-                      id="name" 
-                      value={playerName} 
-                      onChange={(e) => setPlayerName(e.target.value)} 
-                      placeholder="Lionel Messi"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="number">{t("jerseyNumberOptional")}</Label>
-                    <Input 
-                      id="number" 
-                      type="number"
-                      value={playerNumber} 
-                      onChange={(e) => setPlayerNumber(e.target.value)} 
-                      placeholder="10"
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={createPlayer.isPending}>
-                    {createPlayer.isPending ? t("adding") : t("addPlayer")}
+            <div className="flex flex-wrap gap-2">
+              <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="gap-2 rounded-full">
+                    <FileUp className="w-4 h-4" /> {t("importPlayers")}
                   </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{t("importPlayersFromExcel")}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleImportPlayers} className="space-y-4 mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      {t("excelPlayerFormatHint")}
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="players-excel">{t("chooseExcelFile")}</Label>
+                      <Input
+                        id="players-excel"
+                        type="file"
+                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        onChange={(event) =>
+                          setPlayersFile(event.target.files?.[0] || null)
+                        }
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={importPlayers.isPending || !playersFile}
+                    >
+                      {importPlayers.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {t("importing")}
+                        </>
+                      ) : (
+                        t("importPlayers")
+                      )}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-2 rounded-full">
+                    <UserPlus className="w-4 h-4" /> {t("addPlayer")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{t("addPlayerToTeam", { team: team.name })}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleAddPlayer} className="space-y-4 mt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">{t("playerName")}</Label>
+                      <Input 
+                        id="name" 
+                        value={playerName} 
+                        onChange={(e) => setPlayerName(e.target.value)} 
+                        placeholder="Lionel Messi"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="number">{t("jerseyNumberOptional")}</Label>
+                      <Input 
+                        id="number" 
+                        type="number"
+                        value={playerNumber} 
+                        onChange={(e) => setPlayerNumber(e.target.value)} 
+                        placeholder="10"
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={createPlayer.isPending}>
+                      {createPlayer.isPending ? t("adding") : t("addPlayer")}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
           )}
         </div>
 

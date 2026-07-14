@@ -150,6 +150,72 @@ export function useCreateTournamentTeam() {
   });
 }
 
+export type TournamentTeamsImportResult = {
+  created: TournamentTeamWithMeta[];
+  enrolledExisting: TournamentTeamWithMeta[];
+  skipped: Array<{ row: number; name: string; reason: string }>;
+};
+
+export function useImportTournamentTeams() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      tournamentId,
+      teams,
+    }: {
+      tournamentId: number;
+      teams: Array<{
+        name: string;
+        color?: string;
+        twitchChannel?: string | null;
+      }>;
+    }) => {
+      const res = await apiFetch(`/api/tournaments/${tournamentId}/teams/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teams }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to import tournament teams");
+      }
+      return res.json() as Promise<TournamentTeamsImportResult>;
+    },
+    onSuccess: () => refreshAppData(queryClient),
+  });
+}
+
+export function useGenerateTournamentMatches() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      tournamentId,
+      startAt,
+      intervalDays,
+      location,
+    }: {
+      tournamentId: number;
+      startAt: string;
+      intervalDays: number;
+      location?: string | null;
+    }) => {
+      const res = await apiFetch(`/api/tournaments/${tournamentId}/matches/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startAt, intervalDays, location }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to generate tournament matches");
+      }
+      return res.json() as Promise<{ rounds: number; matches: unknown[] }>;
+    },
+    onSuccess: () => refreshAppData(queryClient),
+  });
+}
+
 export function useRemoveTeamFromTournament() {
   const queryClient = useQueryClient();
   return useMutation({

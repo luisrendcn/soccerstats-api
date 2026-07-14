@@ -101,7 +101,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
       toast({
         variant: "destructive",
         title: t("error"),
-        description: t("unexpectedError"),
+        description: error instanceof Error ? error.message : t("unexpectedError"),
       });
     }
   };

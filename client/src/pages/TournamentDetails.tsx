@@ -3,6 +3,8 @@ import {
   useTournamentTeams,
   useAddTeamToTournament,
   useCreateTournamentTeam,
+  useGenerateTournamentMatches,
+  useImportTournamentTeams,
   useRemoveTeamFromTournament,
 } from "@/hooks/use-tournaments";
 import { useTeams } from "@/hooks/use-teams";
@@ -11,7 +13,7 @@ import { TeamColorCircleSmall } from "@/components/TeamColor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, Plus, Trash2, Calendar, Gamepad2 } from "lucide-react";
+import { Loader2, ArrowLeft, Plus, Trash2, Calendar, Gamepad2, FileUp, CalendarPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -42,6 +44,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import StandingsTable from "@/components/ui/StandingTable";
 import { useLanguage } from "@/lib/i18n.tsx";
+import { parseTeamImportFile } from "@/lib/spreadsheet-import";
 
 interface TournamentDetailsProps {
   tournamentId: number;
@@ -67,6 +70,8 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   
   const addTeam = useAddTeamToTournament();
   const createTeam = useCreateTournamentTeam();
+  const importTeams = useImportTournamentTeams();
+  const generateMatches = useGenerateTournamentMatches();
   const removeTeam = useRemoveTeamFromTournament();
   
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
@@ -76,6 +81,13 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const [newTeamColor, setNewTeamColor] = useState("#000000");
   const [newTeamTwitchChannel, setNewTeamTwitchChannel] = useState("");
   const [selectedTeamTwitchChannel, setSelectedTeamTwitchChannel] = useState("");
+  const [isImportTeamsOpen, setIsImportTeamsOpen] = useState(false);
+  const [teamsFile, setTeamsFile] = useState<File | null>(null);
+  const [isGenerateScheduleOpen, setIsGenerateScheduleOpen] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("09:00");
+  const [scheduleIntervalDays, setScheduleIntervalDays] = useState("7");
+  const [scheduleLocation, setScheduleLocation] = useState("");
   const isVideogameTournament = tournament?.tournamentType === "videogame";
 
   const handleCreateTeam = async (event: React.FormEvent) => {
@@ -166,6 +178,82 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
     }
   };
 
+  const handleImportTeams = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!teamsFile) {
+      toast({
+        variant: "destructive",
+        title: t("error"),
+        description: t("chooseExcelFile"),
+      });
+      return;
+    }
+
+    try {
+      const teams = await parseTeamImportFile(teamsFile);
+      if (teams.length === 0) {
+        toast({
+          variant: "destructive",
+          title: t("error"),
+          description: t("noRowsFound"),
+        });
+        return;
+      }
+      const result = await importTeams.mutateAsync({ tournamentId, teams });
+      const importedCount = result.created.length + result.enrolledExisting.length;
+      toast({
+        title: t("teamsImported"),
+        description: t("teamsImportedDescription", {
+          count: importedCount,
+          skipped: result.skipped.length,
+        }),
+      });
+      setTeamsFile(null);
+      setIsImportTeamsOpen(false);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: t("error"),
+        description: error instanceof Error ? error.message : t("unexpectedError"),
+      });
+    }
+  };
+
+  const handleGenerateSchedule = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!scheduleDate || !scheduleTime) {
+      toast({
+        variant: "destructive",
+        title: t("missingFields"),
+        description: t("scheduleBaseDateRequired"),
+      });
+      return;
+    }
+
+    try {
+      const startAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
+      const result = await generateMatches.mutateAsync({
+        tournamentId,
+        startAt,
+        intervalDays: Number(scheduleIntervalDays) || 7,
+        location: scheduleLocation.trim() || null,
+      });
+      toast({
+        title: t("roundsGenerated", { count: result.rounds }),
+        description: t("matchesGeneratedDescription", {
+          count: result.matches.length,
+        }),
+      });
+      setIsGenerateScheduleOpen(false);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: t("error"),
+        description: error instanceof Error ? error.message : t("unexpectedError"),
+      });
+    }
+  };
+
   if (tournamentLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -195,6 +283,12 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   // Equipos que ya están en el torneo
   const tournamentTeamIds = new Set(tournamentTeams?.map((t) => t.id) || []);
   const availableTeams = teams?.filter((team) => !tournamentTeamIds.has(team.id)) || [];
+  const teamCount = tournamentTeams?.length || 0;
+  const hasOddTeamCount = teamCount > 0 && teamCount % 2 !== 0;
+  const canGenerateSchedule = teamCount >= 2 && !hasOddTeamCount;
+  const defaultScheduleDate = tournament.startDate
+    ? new Date(tournament.startDate).toISOString().split("T")[0]
+    : "";
 
   // fetch standings for this tournament
   const standingsTitle = t("standingsTitle", { tournament: tournament.name });
@@ -271,7 +365,50 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
           <h2 className="text-2xl font-bold">{t("participantTeams")}</h2>
           {canManageTournaments && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Dialog open={isImportTeamsOpen} onOpenChange={setIsImportTeamsOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <FileUp className="w-4 h-4 mr-2" />
+                    {t("importTeams")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{t("importTeamsFromExcel")}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleImportTeams} className="space-y-4 mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      {t("excelTeamFormatHint")}
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="teams-excel">{t("chooseExcelFile")}</Label>
+                      <Input
+                        id="teams-excel"
+                        type="file"
+                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        onChange={(event) =>
+                          setTeamsFile(event.target.files?.[0] || null)
+                        }
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={importTeams.isPending || !teamsFile}
+                    >
+                      {importTeams.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {t("importing")}
+                        </>
+                      ) : (
+                        t("importTeams")
+                      )}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
               <Dialog open={isCreateTeamOpen} onOpenChange={setIsCreateTeamOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
@@ -338,7 +475,100 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                   </form>
                 </DialogContent>
               </Dialog>
+              <Dialog
+                open={isGenerateScheduleOpen}
+                onOpenChange={(open) => {
+                  setIsGenerateScheduleOpen(open);
+                  if (open && !scheduleDate) setScheduleDate(defaultScheduleDate);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    disabled={!canGenerateSchedule}
+                    title={
+                      hasOddTeamCount
+                        ? t("oddTeamsBlocked")
+                        : teamCount < 2
+                          ? t("atLeastTwoTeamsNeeded")
+                          : t("generateAutomaticSchedule")
+                    }
+                  >
+                    <CalendarPlus className="w-4 h-4 mr-2" />
+                    {t("generateSchedule")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{t("generateAutomaticSchedule")}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleGenerateSchedule} className="space-y-4 mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      {t("generateScheduleDescription")}
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="schedule-date">{t("firstMatchDate")}</Label>
+                        <Input
+                          id="schedule-date"
+                          type="date"
+                          value={scheduleDate}
+                          onChange={(event) => setScheduleDate(event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="schedule-time">{t("time")}</Label>
+                        <Input
+                          id="schedule-time"
+                          type="time"
+                          value={scheduleTime}
+                          onChange={(event) => setScheduleTime(event.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="schedule-interval">{t("intervalDays")}</Label>
+                        <Input
+                          id="schedule-interval"
+                          type="number"
+                          min="0"
+                          max="30"
+                          value={scheduleIntervalDays}
+                          onChange={(event) =>
+                            setScheduleIntervalDays(event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="schedule-location">{t("location")}</Label>
+                        <Input
+                          id="schedule-location"
+                          value={scheduleLocation}
+                          onChange={(event) => setScheduleLocation(event.target.value)}
+                          placeholder={t("locationPlaceholder")}
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={generateMatches.isPending}
+                    >
+                      {generateMatches.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {t("scheduling")}
+                        </>
+                      ) : (
+                        t("generateSchedule")
+                      )}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
               <Button
+                variant="outline"
                 size="sm"
                 onClick={() => setLocation(`/tournaments/${tournamentId}/matches/new`)}
                 disabled={(tournamentTeams?.length || 0) < 2}
@@ -359,6 +589,12 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
           <div className="flex justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
+        )}
+
+        {canManageTournaments && hasOddTeamCount && (
+          <Card className="border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            {t("oddTeamsBlocked")}
+          </Card>
         )}
 
         {tournamentTeams && tournamentTeams.length === 0 ? (
