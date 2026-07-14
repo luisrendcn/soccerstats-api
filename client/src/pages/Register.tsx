@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useRegister } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/PasswordInput";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -154,25 +155,27 @@ export default function Register() {
 
             <div className="space-y-2">
               <Label htmlFor="password">{t("password")}</Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                showLabel={t("showPassword")}
+                hideLabel={t("hidePassword")}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="confirmPassword">{t("confirmPassword")}</Label>
-              <Input
+              <PasswordInput
                 id="confirmPassword"
-                type="password"
                 placeholder="••••••••"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
+                showLabel={t("showPassword")}
+                hideLabel={t("hidePassword")}
               />
             </div>
 

@@ -20,3 +20,13 @@ services:
         value: https://localhost,capacitor://localhost
       - key: PORT
         value: 10000
+      - key: APP_PUBLIC_BASE_URL
+        value: https://soccer-stats-api.onrender.com
+      - key: MAILGUN_API_KEY
+        sync: false
+      - key: MAILGUN_DOMAIN
+        sync: false
+      - key: MAILGUN_FROM
+        sync: false
+      - key: ADMIN_NOTIFY_EMAIL
+        sync: false

@@ -12,6 +12,13 @@ import {
   ROLE_PERMISSIONS,
 } from "./auth";
 import {
+  notifyAccessApproved,
+  notifyAccessRejected,
+  notifyAccessRequested,
+  notifyUserCreated,
+  trySendEmail,
+} from "./email";
+import {
   loginSchema,
   registerSchema,
   createTournamentSchema,
@@ -335,6 +342,14 @@ export async function registerRoutes(
         requestedRole: input.requestedRole,
       });
 
+      void trySendEmail("access requested", () =>
+        notifyAccessRequested({
+          email,
+          name: input.name.trim(),
+          requestedRole: input.requestedRole,
+        }),
+      );
+
       res.status(202).json({
         status: "pending",
         message:
@@ -526,6 +541,13 @@ export async function registerRoutes(
       }
 
       const { password, ...safeUser } = user;
+      void trySendEmail("access approved", () =>
+        notifyAccessApproved({
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        }),
+      );
       res.status(201).json(safeUser);
     },
   );
@@ -550,6 +572,12 @@ export async function registerRoutes(
       }
 
       const { password, ...safeRequest } = request;
+      void trySendEmail("access rejected", () =>
+        notifyAccessRejected({
+          email: request.email,
+          name: request.name,
+        }),
+      );
       res.json(safeRequest);
     },
   );
@@ -600,6 +628,13 @@ export async function registerRoutes(
       });
 
       const { password: _, ...safeUser } = user;
+      void trySendEmail("user created", () =>
+        notifyUserCreated({
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        }),
+      );
       res.status(201).json(safeUser);
     } catch (err) {
       if (err instanceof z.ZodError) {

@@ -14,6 +14,7 @@ import {
 import { useTeams } from "@/hooks/use-teams";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/PasswordInput";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -398,12 +399,13 @@ export default function AdminUsers() {
 
                 <div className="space-y-2">
                   <Label htmlFor="password">{t("password")}</Label>
-                  <Input
+                  <PasswordInput
                     id="password"
-                    type="password"
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    showLabel={t("showPassword")}
+                    hideLabel={t("hidePassword")}
                   />
                 </div>
 
