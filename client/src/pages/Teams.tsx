@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { useTeams } from "@/hooks/use-teams";
+import { useDeleteTeam, useTeams } from "@/hooks/use-teams";
 import { useAuth } from "@/hooks/use-auth";
-import { useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { TeamColorGradientBackground, TeamColorCircle } from "@/components/TeamColor";
 import { Link } from "wouter";
@@ -10,17 +9,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/lib/i18n.tsx";
-import { apiFetch } from "@/lib/api";
-import { refreshAppData } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Teams() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const queryClient = useQueryClient();
   const { data: teamsResp, isLoading } = useTeams(page, 10, search);
+  const deleteTeam = useDeleteTeam();
   const teams = teamsResp;
   const totalPages = 1; // Single page for now
   const { t } = useLanguage();
+  const { toast } = useToast();
   const { data: auth } = useAuth();
 
   if (isLoading) {
@@ -64,7 +63,7 @@ export default function Teams() {
               </div>
             </Link>
             {auth?.userRole === 'admin' && (
-              <button title={t("deleteTeamConfirm", { name: team.name })} className="absolute top-2 right-2 p-2 rounded-md bg-red-50 hover:bg-red-100" onClick={async (e) => { e.preventDefault(); if (!confirm(t("deleteTeamConfirm", { name: team.name }))) return; const response = await apiFetch(`/api/teams/${team.id}`, { method: "DELETE" }); if (!response.ok) throw new Error(t("deleteTeamFailed")); await refreshAppData(queryClient); }}>
+              <button title={t("deleteTeamConfirm", { name: team.name })} className="absolute top-2 right-2 p-2 rounded-md bg-red-50 hover:bg-red-100" onClick={async (e) => { e.preventDefault(); if (!confirm(t("deleteTeamConfirm", { name: team.name }))) return; await deleteTeam.mutateAsync(team.id).catch(() => toast({ variant: "destructive", title: t("error"), description: t("deleteTeamFailed") })); }}>
                 <Trash className="w-4 h-4 text-red-600" />
               </button>
             )}

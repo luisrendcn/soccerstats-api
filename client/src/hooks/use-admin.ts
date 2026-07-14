@@ -1,10 +1,39 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RegistrationRequest, User } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
+import {
+  invalidateOptimisticQueries,
+  patchArrayItemById,
+  prependUniqueArrayItem,
+  queryKeyStartsWith,
+  removeArrayItemById,
+  replaceArrayItemById,
+  restoreOptimisticQueries,
+  snapshotOptimisticQueries,
+  updateOptimisticQueries,
+  type OptimisticSnapshot,
+  type QueryKeyPredicate,
+} from "@/lib/optimistic-cache";
 
 export interface SafeUser extends Omit<User, "password"> {}
 export interface SafeRegistrationRequest
   extends Omit<RegistrationRequest, "password"> {}
+
+type UserUpdateInput = {
+  id: number;
+  name?: string;
+  email?: string;
+  role?: string;
+  teamId?: number | null;
+  isActive?: boolean;
+};
+
+const usersPredicate: QueryKeyPredicate = (queryKey) =>
+  queryKeyStartsWith(queryKey, ["admin", "users"]);
+
+const adminPredicate: QueryKeyPredicate = (queryKey) =>
+  usersPredicate(queryKey) ||
+  queryKeyStartsWith(queryKey, ["admin", "registration-requests"]);
 
 export function useUsers() {
   return useQuery({
@@ -34,7 +63,12 @@ export function useRegistrationRequests(enabled = true) {
 
 function useReviewRegistrationRequest(action: "approve" | "reject") {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<
+    SafeUser | SafeRegistrationRequest,
+    Error,
+    number,
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
     mutationFn: async (id: number) => {
       const res = await apiFetch(
         `/api/admin/registration-requests/${id}/${action}`,
@@ -49,11 +83,35 @@ function useReviewRegistrationRequest(action: "approve" | "reject") {
       }
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["admin", "registration-requests"],
+    onMutate: async (id) => {
+      const snapshot = await snapshotOptimisticQueries(
+        queryClient,
+        adminPredicate,
+      );
+
+      updateOptimisticQueries(queryClient, adminPredicate, (data, queryKey) => {
+        if (queryKeyStartsWith(queryKey, ["admin", "registration-requests"])) {
+          return removeArrayItemById(data, id);
+        }
+        return data;
       });
-      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+
+      return { snapshot, predicate: adminPredicate };
+    },
+    onError: (_error, _id, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSuccess: (result) => {
+      if (action === "approve" && "role" in result) {
+        updateOptimisticQueries(queryClient, usersPredicate, (data) =>
+          prependUniqueArrayItem(data, result as SafeUser),
+        );
+      }
+    },
+    onSettled: (_data, _error, _id, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
     },
   });
 }
@@ -88,26 +146,24 @@ export function useCreateUser() {
       }
       return res.json() as Promise<SafeUser>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    onSuccess: (user) => {
+      updateOptimisticQueries(queryClient, usersPredicate, (data) =>
+        prependUniqueArrayItem(data, user),
+      );
+      void invalidateOptimisticQueries(queryClient, usersPredicate);
     },
   });
 }
 
 export function useUpdateUser() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      id,
-      ...data
-    }: {
-      id: number;
-      name?: string;
-      email?: string;
-      role?: string;
-      teamId?: number | null;
-      isActive?: boolean;
-    }) => {
+  return useMutation<
+    SafeUser,
+    Error,
+    UserUpdateInput,
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
+    mutationFn: async ({ id, ...data }) => {
       const res = await apiFetch(`/api/admin/users/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -120,16 +176,43 @@ export function useUpdateUser() {
       }
       return res.json() as Promise<SafeUser>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    onMutate: async ({ id, ...data }) => {
+      const snapshot = await snapshotOptimisticQueries(
+        queryClient,
+        usersPredicate,
+      );
+
+      updateOptimisticQueries(queryClient, usersPredicate, (current) =>
+        patchArrayItemById(current, id, data),
+      );
+
+      return { snapshot, predicate: usersPredicate };
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSuccess: (user) => {
+      updateOptimisticQueries(queryClient, usersPredicate, (data) =>
+        replaceArrayItemById(data, user),
+      );
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
     },
   });
 }
 
 export function useUpdateUserRole() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, role }: { id: number; role: string }) => {
+  return useMutation<
+    SafeUser,
+    Error,
+    { id: number; role: string },
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
+    mutationFn: async ({ id, role }) => {
       const res = await apiFetch(`/api/admin/users/${id}/role`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -142,16 +225,43 @@ export function useUpdateUserRole() {
       }
       return res.json() as Promise<SafeUser>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    onMutate: async ({ id, role }) => {
+      const snapshot = await snapshotOptimisticQueries(
+        queryClient,
+        usersPredicate,
+      );
+
+      updateOptimisticQueries(queryClient, usersPredicate, (data) =>
+        patchArrayItemById(data, id, { role }),
+      );
+
+      return { snapshot, predicate: usersPredicate };
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSuccess: (user) => {
+      updateOptimisticQueries(queryClient, usersPredicate, (data) =>
+        replaceArrayItemById(data, user),
+      );
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
     },
   });
 }
 
 export function useSetUserActive() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, isActive }: { id: number; isActive: boolean }) => {
+  return useMutation<
+    SafeUser,
+    Error,
+    { id: number; isActive: boolean },
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
+    mutationFn: async ({ id, isActive }) => {
       const res = await apiFetch(`/api/admin/users/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -164,15 +274,42 @@ export function useSetUserActive() {
       }
       return res.json() as Promise<SafeUser>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    onMutate: async ({ id, isActive }) => {
+      const snapshot = await snapshotOptimisticQueries(
+        queryClient,
+        usersPredicate,
+      );
+
+      updateOptimisticQueries(queryClient, usersPredicate, (data) =>
+        patchArrayItemById(data, id, { isActive }),
+      );
+
+      return { snapshot, predicate: usersPredicate };
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSuccess: (user) => {
+      updateOptimisticQueries(queryClient, usersPredicate, (data) =>
+        replaceArrayItemById(data, user),
+      );
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
     },
   });
 }
 
 export function useDeleteUserPermanently() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<
+    { success: boolean },
+    Error,
+    number,
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
     mutationFn: async (id: number) => {
       const res = await apiFetch(`/api/admin/users/${id}/permanent`, {
         method: "DELETE",
@@ -184,11 +321,43 @@ export function useDeleteUserPermanently() {
       }
       return res.json() as Promise<{ success: boolean }>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
-      queryClient.invalidateQueries({
-        queryKey: ["admin", "registration-requests"],
+    onMutate: async (id) => {
+      const snapshot = await snapshotOptimisticQueries(
+        queryClient,
+        adminPredicate,
+      );
+      const users = queryClient.getQueryData<SafeUser[]>(["admin", "users"]);
+      const deletedEmail = users?.find((user) => user.id === id)?.email;
+
+      updateOptimisticQueries(queryClient, adminPredicate, (data, queryKey) => {
+        if (queryKeyStartsWith(queryKey, ["admin", "users"])) {
+          return removeArrayItemById(data, id);
+        }
+        if (
+          deletedEmail &&
+          queryKeyStartsWith(queryKey, ["admin", "registration-requests"]) &&
+          Array.isArray(data)
+        ) {
+          return data.filter(
+            (request) =>
+              typeof request !== "object" ||
+              request === null ||
+              !("email" in request) ||
+              request.email !== deletedEmail,
+          );
+        }
+        return data;
       });
+
+      return { snapshot, predicate: adminPredicate };
+    },
+    onError: (_error, _id, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSettled: (_data, _error, _id, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
     },
   });
 }

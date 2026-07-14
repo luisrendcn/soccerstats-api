@@ -1,15 +1,13 @@
 import { useState } from "react";
-import { useMatches } from "@/hooks/use-matches";
+import { useDeleteMatch, useMatches } from "@/hooks/use-matches";
 import { useAuth } from "@/hooks/use-auth";
 import { useTeams } from "@/hooks/use-teams";
-import { api } from "@shared/routes";
 import { Layout } from "@/components/Layout";
 import { MatchCard } from "@/components/MatchCard";
 import { Loader2, Radio, Trash } from "lucide-react";
 import { useLanguage } from "@/lib/i18n.tsx";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
-import { refreshAppData } from "@/lib/queryClient";
+import { useQueries } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import {
   fetchTwitchStreamStatus,
   getTwitchChannelFromMatch,
@@ -20,10 +18,11 @@ import {
 
 export default function Matches() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const queryClient = useQueryClient();
   const { data: matchesResp, isLoading: matchesLoading } = useMatches(page, 10, search);
+  const deleteMatch = useDeleteMatch();
   const { data: teamsResp, isLoading: teamsLoading } = useTeams();
   const matches = matchesResp;
   const totalPages = 1; // Single page for now
@@ -137,9 +136,7 @@ export default function Matches() {
             {canDeleteMatches && (
               <button title={t("deleteMatch")} className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
                 if (!confirm(t("deleteMatchConfirm"))) return;
-                const response = await apiFetch(`/api/matches/${match.id}`, { method: "DELETE" });
-                if (!response.ok) throw new Error(t("deleteMatchFailed"));
-                await refreshAppData(queryClient);
+                await deleteMatch.mutateAsync(match.id).catch(() => toast({ variant: "destructive", title: t("error"), description: t("deleteMatchFailed") }));
               }}>
                 <Trash className="w-4 h-4 text-red-600" />
               </button>

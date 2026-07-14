@@ -3,6 +3,18 @@ import type { Tournament, CreateTournamentInput, UpdateTournamentInput, Team, In
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
 import {
+  invalidateOptimisticQueries,
+  patchArrayItemById,
+  queryKeyStartsWith,
+  removeArrayItemById,
+  replaceArrayItemById,
+  restoreOptimisticQueries,
+  snapshotOptimisticQueries,
+  updateOptimisticQueries,
+  type OptimisticSnapshot,
+  type QueryKeyPredicate,
+} from "@/lib/optimistic-cache";
+import {
   readPersistentCache,
   writePersistentCache,
 } from "@/lib/persistentCache";
@@ -58,7 +70,12 @@ export function useCreateTournament() {
 
 export function useUpdateTournament() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<
+    Tournament,
+    Error,
+    { id: number; data: UpdateTournamentInput },
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
     mutationFn: async ({ id, data }: { id: number; data: UpdateTournamentInput }) => {
       const res = await apiFetch(`/api/tournaments/${id}`, {
         method: "PUT",
@@ -72,13 +89,49 @@ export function useUpdateTournament() {
       }
       return res.json() as Promise<Tournament>;
     },
-    onSuccess: () => refreshAppData(queryClient),
+    onMutate: async ({ id, data }) => {
+      const predicate = tournamentPredicate(id);
+      const snapshot = await snapshotOptimisticQueries(queryClient, predicate);
+
+      updateOptimisticQueries(queryClient, predicate, (current, queryKey) => {
+        if (queryKey.length === 2 && queryKeyStartsWith(queryKey, ["tournaments", id])) {
+          return current && typeof current === "object"
+            ? { ...current, ...data }
+            : current;
+        }
+        if (queryKey.length === 1 && queryKeyStartsWith(queryKey, ["tournaments"])) {
+          return patchArrayItemById(current, id, data);
+        }
+        return current;
+      });
+
+      return { snapshot, predicate };
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSuccess: (tournament) => {
+      queryClient.setQueryData(["tournaments", tournament.id], tournament);
+      updateOptimisticQueries(queryClient, (queryKey) => queryKey.length === 1 && queryKeyStartsWith(queryKey, ["tournaments"]), (data) =>
+        replaceArrayItemById(data, tournament),
+      );
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
+    },
   });
 }
 
 export function useDeleteTournament() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<
+    unknown,
+    Error,
+    number,
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
     mutationFn: async (id: number) => {
       const res = await apiFetch(`/api/tournaments/${id}`, {
         method: "DELETE",
@@ -90,8 +143,49 @@ export function useDeleteTournament() {
       }
       return res.json();
     },
-    onSuccess: () => refreshAppData(queryClient),
+    onMutate: async (id) => {
+      const predicate = tournamentPredicate(id);
+      const snapshot = await snapshotOptimisticQueries(queryClient, predicate);
+
+      if (queryClient.getQueryState(["tournaments", id])) {
+        queryClient.setQueryData(["tournaments", id], null);
+      }
+      updateOptimisticQueries(queryClient, predicate, (data, queryKey) => {
+        if (queryKey.length === 1 && queryKeyStartsWith(queryKey, ["tournaments"])) {
+          return removeArrayItemById(data, id);
+        }
+        if (queryKeyStartsWith(queryKey, ["tournaments", id, "teams"])) {
+          return [];
+        }
+        if (queryKeyStartsWith(queryKey, ["/api/matches"])) {
+          if (!Array.isArray(data)) return data;
+          return data.filter(
+            (match) =>
+              typeof match === "object" &&
+              match !== null &&
+              !("tournamentId" in match && match.tournamentId === id),
+          );
+        }
+        return data;
+      });
+
+      return { snapshot, predicate };
+    },
+    onError: (_error, _id, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSettled: (_data, _error, _id, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
+    },
   });
+}
+
+function tournamentPredicate(tournamentId: number): QueryKeyPredicate {
+  return (queryKey) =>
+    queryKeyStartsWith(queryKey, ["tournaments"]) ||
+    queryKeyStartsWith(queryKey, ["/api/matches"]);
 }
 
 export function useAddTeamToTournament() {
@@ -218,7 +312,12 @@ export function useGenerateTournamentMatches() {
 
 export function useRemoveTeamFromTournament() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<
+    unknown,
+    Error,
+    { tournamentId: number; teamId: number },
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
     mutationFn: async ({ tournamentId, teamId }: { tournamentId: number; teamId: number }) => {
       const res = await apiFetch(`/api/tournaments/${tournamentId}/teams/${teamId}`, {
         method: "DELETE",
@@ -230,7 +329,45 @@ export function useRemoveTeamFromTournament() {
       }
       return res.json();
     },
-    onSuccess: () => refreshAppData(queryClient),
+    onMutate: async ({ tournamentId, teamId }) => {
+      const predicate: QueryKeyPredicate = (queryKey) =>
+        queryKeyStartsWith(queryKey, ["tournaments", tournamentId, "teams"]) ||
+        queryKeyStartsWith(queryKey, ["/api/teams"]) ||
+        queryKeyStartsWith(queryKey, ["/api/matches"]);
+      const snapshot = await snapshotOptimisticQueries(queryClient, predicate);
+
+      updateOptimisticQueries(queryClient, predicate, (data, queryKey) => {
+        if (queryKeyStartsWith(queryKey, ["tournaments", tournamentId, "teams"])) {
+          return removeArrayItemById(data, teamId);
+        }
+        if (queryKeyStartsWith(queryKey, ["/api/matches"])) {
+          if (!Array.isArray(data)) return data;
+          return data.filter(
+            (match) =>
+              typeof match === "object" &&
+              match !== null &&
+              !(
+                "tournamentId" in match &&
+                "homeTeamId" in match &&
+                "awayTeamId" in match &&
+                match.tournamentId === tournamentId &&
+                (match.homeTeamId === teamId || match.awayTeamId === teamId)
+              ),
+          );
+        }
+        return data;
+      });
+
+      return { snapshot, predicate };
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
+    },
   });
 }
 

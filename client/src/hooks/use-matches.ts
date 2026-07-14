@@ -3,6 +3,18 @@ import { api, buildUrl, type InsertMatch, type InsertGoal } from "@shared/routes
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
 import {
+  invalidateOptimisticQueries,
+  patchArrayItemById,
+  queryKeyStartsWith,
+  removeArrayItemById,
+  replaceArrayItemById,
+  restoreOptimisticQueries,
+  snapshotOptimisticQueries,
+  updateOptimisticQueries,
+  type OptimisticSnapshot,
+  type QueryKeyPredicate,
+} from "@/lib/optimistic-cache";
+import {
   readPersistentCache,
   writePersistentCache,
 } from "@/lib/persistentCache";
@@ -73,7 +85,12 @@ export function useCreateMatch() {
 
 export function useUpdateMatch() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<
+    Awaited<ReturnType<typeof api.matches.update.responses[200]["parse"]>>,
+    Error,
+    { id: number } & Partial<InsertMatch>,
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
     mutationFn: async ({ id, ...updates }: { id: number } & Partial<InsertMatch>) => {
       const url = buildUrl(api.matches.update.path, { id });
       const res = await apiFetch(url, {
@@ -84,7 +101,103 @@ export function useUpdateMatch() {
       if (!res.ok) throw new Error('Failed to update match');
       return api.matches.update.responses[200].parse(await res.json());
     },
-    onSuccess: () => refreshAppData(queryClient),
+    onMutate: async ({ id, ...updates }) => {
+      const predicate = matchUpdatePredicate(id);
+      const snapshot = await snapshotOptimisticQueries(queryClient, predicate);
+
+      updateOptimisticQueries(queryClient, predicate, (data, queryKey) => {
+        if (Array.isArray(data)) {
+          return patchArrayItemById(data, id, updates);
+        }
+        if (queryKeyStartsWith(queryKey, [api.matches.get.path, id])) {
+          return data && typeof data === "object" ? { ...data, ...updates } : data;
+        }
+        return data;
+      });
+
+      return { snapshot, predicate };
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSuccess: (match, variables) => {
+      const predicate = matchUpdatePredicate(variables.id);
+      queryClient.setQueryData([api.matches.get.path, variables.id], match);
+      updateOptimisticQueries(queryClient, predicate, (data) =>
+        replaceArrayItemById(data, match),
+      );
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
+    },
+  });
+}
+
+function matchUpdatePredicate(matchId: number): QueryKeyPredicate {
+  return (queryKey) =>
+    queryKeyStartsWith(queryKey, [api.matches.list.path]) ||
+    queryKeyStartsWith(queryKey, [api.matches.get.path, matchId]);
+}
+
+function matchDeletePredicate(matchId: number): QueryKeyPredicate {
+  return (queryKey) =>
+    matchUpdatePredicate(matchId)(queryKey) ||
+    queryKeyStartsWith(queryKey, [api.goals.list.path, matchId]) ||
+    queryKeyStartsWith(queryKey, ["matches", matchId]);
+}
+
+export function useDeleteMatch() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { success: boolean },
+    Error,
+    number,
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.matches.delete.path, { id });
+      const res = await apiFetch(url, {
+        method: api.matches.delete.method,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to delete match");
+      }
+      return api.matches.delete.responses[200].parse(await res.json());
+    },
+    onMutate: async (id) => {
+      const predicate = matchDeletePredicate(id);
+      const snapshot = await snapshotOptimisticQueries(queryClient, predicate);
+
+      if (queryClient.getQueryState([api.matches.get.path, id])) {
+        queryClient.setQueryData([api.matches.get.path, id], null);
+      }
+      updateOptimisticQueries(queryClient, predicate, (data, queryKey) => {
+        if (queryKeyStartsWith(queryKey, [api.matches.list.path])) {
+          return removeArrayItemById(data, id);
+        }
+        if (
+          queryKeyStartsWith(queryKey, [api.goals.list.path, id]) ||
+          queryKeyStartsWith(queryKey, ["matches", id, "highlights"])
+        ) {
+          return [];
+        }
+        return data;
+      });
+
+      return { snapshot, predicate };
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
+    },
   });
 }
 

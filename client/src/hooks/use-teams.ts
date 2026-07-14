@@ -3,6 +3,16 @@ import { api, buildUrl, type InsertTeam, type InsertPlayer } from "@shared/route
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
 import {
+  invalidateOptimisticQueries,
+  queryKeyStartsWith,
+  removeArrayItemById,
+  restoreOptimisticQueries,
+  snapshotOptimisticQueries,
+  updateOptimisticQueries,
+  type QueryKeyPredicate,
+  type OptimisticSnapshot,
+} from "@/lib/optimistic-cache";
+import {
   readPersistentCache,
   writePersistentCache,
 } from "@/lib/persistentCache";
@@ -68,6 +78,83 @@ export function useCreateTeam() {
   });
 }
 
+function teamDeletePredicate(teamId: number): QueryKeyPredicate {
+  return (queryKey) =>
+    queryKeyStartsWith(queryKey, [api.teams.list.path]) ||
+    queryKeyStartsWith(queryKey, [api.teams.get.path, teamId]) ||
+    queryKeyStartsWith(queryKey, [api.matches.list.path]) ||
+    (queryKey[0] === "tournaments" && queryKey[2] === "teams");
+}
+
+export function useDeleteTeam() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { success: boolean },
+    Error,
+    number,
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.teams.delete.path, { id });
+      const res = await apiFetch(url, {
+        method: api.teams.delete.method,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to delete team");
+      }
+      return api.teams.delete.responses[200].parse(await res.json());
+    },
+    onMutate: async (id) => {
+      const predicate = teamDeletePredicate(id);
+      const snapshot = await snapshotOptimisticQueries(queryClient, predicate);
+
+      if (queryClient.getQueryState([api.teams.get.path, id])) {
+        queryClient.setQueryData([api.teams.get.path, id], null);
+      }
+      updateOptimisticQueries(queryClient, predicate, (data, queryKey) => {
+        if (
+          queryKeyStartsWith(queryKey, [api.matches.list.path]) &&
+          Array.isArray(data)
+        ) {
+          return data.filter(
+            (match) =>
+              typeof match === "object" &&
+              match !== null &&
+              !(
+                "homeTeamId" in match &&
+                "awayTeamId" in match &&
+                ((match as { homeTeamId: unknown }).homeTeamId === id ||
+                  (match as { awayTeamId: unknown }).awayTeamId === id)
+              ),
+          );
+        }
+        if (queryKey[0] === "tournaments" && queryKey[2] === "teams") {
+          return removeArrayItemById(data, id);
+        }
+        if (
+          queryKeyStartsWith(queryKey, [api.teams.list.path]) ||
+          queryKeyStartsWith(queryKey, [api.teams.get.path, id])
+        ) {
+          return removeArrayItemById(data, id);
+        }
+        return data;
+      });
+
+      return { snapshot, predicate };
+    },
+    onError: (_error, _id, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSettled: (_data, _error, _id, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
+    },
+  });
+}
+
 export function useTeamPlayers(
   teamId: number,
   page = 1,
@@ -112,6 +199,54 @@ export function useCreatePlayer() {
       return api.players.create.responses[201].parse(await res.json());
     },
     onSuccess: () => refreshAppData(queryClient),
+  });
+}
+
+function playerDeletePredicate(teamId?: number): QueryKeyPredicate {
+  return (queryKey) =>
+    queryKeyStartsWith(queryKey, [api.players.list.path]) ||
+    (typeof teamId === "number" &&
+      queryKeyStartsWith(queryKey, [api.teams.get.path, teamId]));
+}
+
+export function useDeletePlayer() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    { success: boolean },
+    Error,
+    { id: number; teamId?: number },
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
+    mutationFn: async ({ id }) => {
+      const url = buildUrl(api.players.delete.path, { id });
+      const res = await apiFetch(url, {
+        method: api.players.delete.method,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to delete player");
+      }
+      return api.players.delete.responses[200].parse(await res.json());
+    },
+    onMutate: async ({ id, teamId }) => {
+      const predicate = playerDeletePredicate(teamId);
+      const snapshot = await snapshotOptimisticQueries(queryClient, predicate);
+
+      updateOptimisticQueries(queryClient, predicate, (data) =>
+        removeArrayItemById(data, id),
+      );
+
+      return { snapshot, predicate };
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
+    },
   });
 }
 

@@ -5,6 +5,19 @@ import type {
   UpdateMatchHighlightInput,
 } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
+import {
+  invalidateOptimisticQueries,
+  patchArrayItemById,
+  prependUniqueArrayItem,
+  queryKeyStartsWith,
+  removeArrayItemById,
+  replaceArrayItemById,
+  restoreOptimisticQueries,
+  snapshotOptimisticQueries,
+  updateOptimisticQueries,
+  type OptimisticSnapshot,
+  type QueryKeyPredicate,
+} from "@/lib/optimistic-cache";
 
 export interface HighlightThumbnailSignature {
   cloudName: string;
@@ -65,17 +78,23 @@ export function useCreateMatchHighlight(matchId: number) {
       }
       return res.json() as Promise<MatchHighlight>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["matches", matchId, "highlights"],
-      });
+    onSuccess: (highlight) => {
+      updateOptimisticQueries(queryClient, highlightPredicate(matchId), (data) =>
+        prependUniqueArrayItem(data, highlight),
+      );
+      void invalidateOptimisticQueries(queryClient, highlightPredicate(matchId));
     },
   });
 }
 
 export function useUpdateMatchHighlight(matchId: number) {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<
+    MatchHighlight,
+    Error,
+    { id: number } & UpdateMatchHighlightInput,
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
     mutationFn: async ({
       id,
       ...data
@@ -92,17 +111,40 @@ export function useUpdateMatchHighlight(matchId: number) {
       }
       return res.json() as Promise<MatchHighlight>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["matches", matchId, "highlights"],
-      });
+    onMutate: async ({ id, ...data }) => {
+      const predicate = highlightPredicate(matchId);
+      const snapshot = await snapshotOptimisticQueries(queryClient, predicate);
+
+      updateOptimisticQueries(queryClient, predicate, (current) =>
+        patchArrayItemById(current, id, data),
+      );
+
+      return { snapshot, predicate };
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSuccess: (highlight) => {
+      updateOptimisticQueries(queryClient, highlightPredicate(matchId), (data) =>
+        replaceArrayItemById(data, highlight),
+      );
+    },
+    onSettled: (_data, _error, _variables, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
     },
   });
 }
 
 export function useDeleteMatchHighlight(matchId: number) {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useMutation<
+    { success: boolean },
+    Error,
+    number,
+    { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
+  >({
     mutationFn: async (id: number) => {
       const res = await apiFetch(`/api/match-highlights/${id}`, {
         method: "DELETE",
@@ -114,10 +156,27 @@ export function useDeleteMatchHighlight(matchId: number) {
       }
       return res.json() as Promise<{ success: boolean }>;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["matches", matchId, "highlights"],
-      });
+    onMutate: async (id) => {
+      const predicate = highlightPredicate(matchId);
+      const snapshot = await snapshotOptimisticQueries(queryClient, predicate);
+
+      updateOptimisticQueries(queryClient, predicate, (data) =>
+        removeArrayItemById(data, id),
+      );
+
+      return { snapshot, predicate };
+    },
+    onError: (_error, _id, context) => {
+      restoreOptimisticQueries(queryClient, context?.snapshot);
+    },
+    onSettled: (_data, _error, _id, context) => {
+      if (context) {
+        void invalidateOptimisticQueries(queryClient, context.predicate);
+      }
     },
   });
+}
+
+function highlightPredicate(matchId: number): QueryKeyPredicate {
+  return (queryKey) => queryKeyStartsWith(queryKey, ["matches", matchId, "highlights"]);
 }

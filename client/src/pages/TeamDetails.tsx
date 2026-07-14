@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useRoute } from "wouter";
-import { useTeam, useTeamPlayers, useCreatePlayer, useImportTeamPlayers } from "@/hooks/use-teams";
+import { useTeam, useTeamPlayers, useCreatePlayer, useImportTeamPlayers, useDeletePlayer } from "@/hooks/use-teams";
 import { Layout } from "@/components/Layout";
 import { TeamColorCircleSmall } from "@/components/TeamColor";
 import { FileUp, Gamepad2, Loader2, Radio, UserPlus, Shirt, Trash } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,8 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { apiFetch } from "@/lib/api";
-import { refreshAppData } from "@/lib/queryClient";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { parsePlayerImportFile } from "@/lib/spreadsheet-import";
 
@@ -32,12 +29,12 @@ export default function TeamDetails() {
     { enabled: !!teamId && !isVideogameTeam },
   );
   const players = playersResp;
-  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { t } = useLanguage();
   
   const createPlayer = useCreatePlayer();
   const importPlayers = useImportTeamPlayers();
+  const deletePlayer = useDeletePlayer();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [playersFile, setPlayersFile] = useState<File | null>(null);
@@ -262,9 +259,15 @@ export default function TeamDetails() {
               {canDeletePlayers && (
                 <button title={t("removePlayerConfirm", { name: player.name })} className="absolute top-2 right-2 p-1 rounded-md bg-red-50 hover:bg-red-100" onClick={async () => {
                   if (!confirm(t("removePlayerConfirm", { name: player.name }))) return;
-                  const response = await apiFetch(`/api/players/${player.id}`, { method: "DELETE" });
-                  if (!response.ok) throw new Error(t("removePlayerFailed"));
-                  await refreshAppData(queryClient);
+                  try {
+                    await deletePlayer.mutateAsync({ id: player.id, teamId });
+                  } catch {
+                    toast({
+                      variant: "destructive",
+                      title: t("error"),
+                      description: t("removePlayerFailed"),
+                    });
+                  }
                 }}>
                   <Trash className="w-4 h-4 text-red-600" />
                 </button>
