@@ -47,8 +47,17 @@ export function useLogin() {
         credentials: "include",
       });
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Login failed");
+        let message = "No se pudo iniciar sesión";
+        try {
+          const error = await res.json();
+          message = error.message || message;
+        } catch {
+          message =
+            res.status >= 500
+              ? "El servidor no respondió correctamente. Intenta de nuevo."
+              : message;
+        }
+        throw new Error(message);
       }
       return res.json() as Promise<AuthResponse>;
     },

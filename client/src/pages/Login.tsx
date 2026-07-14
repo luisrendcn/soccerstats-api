@@ -29,7 +29,7 @@ export default function Login() {
       toast({
         variant: "destructive",
         title: t("error"),
-        description: t("unexpectedError")
+        description: error instanceof Error ? error.message : t("unexpectedError")
       });
     }
   };
