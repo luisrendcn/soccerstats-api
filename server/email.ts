@@ -40,6 +40,17 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
     emailFrom,
   } = mailConfig();
 
+  if (resendApiKey && emailFrom) {
+    return sendResendMail({
+      apiKey: resendApiKey,
+      from: emailFrom,
+      to,
+      subject,
+      text,
+      html,
+    });
+  }
+
   if (mailgunApiKey && mailgunDomain && mailgunFrom) {
     return sendMailgunMail({
       apiKey: mailgunApiKey,
@@ -52,20 +63,9 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
     });
   }
 
-  if (resendApiKey && emailFrom) {
-    return sendResendMail({
-      apiKey: resendApiKey,
-      from: emailFrom,
-      to,
-      subject,
-      text,
-      html,
-    });
-  }
-
   {
     console.warn(
-      `Email not sent to ${to}: configure MAILGUN_API_KEY, MAILGUN_DOMAIN and MAILGUN_FROM.`,
+      `Email not sent to ${to}: configure RESEND_API_KEY and EMAIL_FROM.`,
     );
     return { skipped: true };
   }
