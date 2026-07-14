@@ -5,6 +5,11 @@ type MailMessage = {
   html?: string;
 };
 
+export type EmailDeliveryResult = {
+  status: "sent" | "skipped" | "failed";
+  message?: string;
+};
+
 const appName = process.env.APP_NAME || "Soccer Stats";
 const appUrl =
   process.env.APP_PUBLIC_BASE_URL ||
@@ -261,8 +266,37 @@ export async function notifyUserCreated(input: {
 
 export async function trySendEmail(operation: string, send: () => Promise<unknown>) {
   try {
-    await send();
+    const result = await send();
+    if (isSkippedEmail(result)) {
+      return {
+        status: "skipped",
+        message:
+          "El correo no se envio porque el proveedor de email no esta configurado.",
+      } satisfies EmailDeliveryResult;
+    }
+    return { status: "sent" } satisfies EmailDeliveryResult;
   } catch (error) {
     console.error(`Failed to send ${operation} email`, error);
+    return {
+      status: "failed",
+      message: emailFailureMessage(error),
+    } satisfies EmailDeliveryResult;
   }
+}
+
+function isSkippedEmail(result: unknown): result is { skipped: true } {
+  return Boolean(
+    result &&
+      typeof result === "object" &&
+      "skipped" in result &&
+      (result as { skipped?: unknown }).skipped === true,
+  );
+}
+
+function emailFailureMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("You can only send testing emails")) {
+    return "La cuenta fue aprobada, pero Resend no envio el correo porque el remitente de prueba solo permite enviar al correo verificado. Verifica un dominio en Resend y usa EMAIL_FROM con un correo de ese dominio.";
+  }
+  return "La cuenta fue aprobada, pero no se pudo enviar el correo de notificacion. Revisa la configuracion del proveedor de email.";
 }

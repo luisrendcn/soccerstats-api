@@ -721,14 +721,32 @@ describe('Authorization edge cases', () => {
 
   it('lets an admin approve a pending registration', async () => {
     const approve = vi.spyOn(storage, 'approveRegistrationRequest');
+    const originalResendApiKey = process.env.RESEND_API_KEY;
+    const originalEmailFrom = process.env.EMAIL_FROM;
+    delete process.env.RESEND_API_KEY;
+    delete process.env.EMAIL_FROM;
 
-    const res = await request(app)
-      .post('/api/admin/registration-requests/12/approve');
+    try {
+      const res = await request(app)
+        .post('/api/admin/registration-requests/12/approve');
 
-    expect(res.status).toBe(201);
-    expect(res.body.email).toBe('approved@example.com');
-    expect(res.body.password).toBeUndefined();
-    expect(approve).toHaveBeenCalledWith(12, 1);
+      expect(res.status).toBe(201);
+      expect(res.body.email).toBe('approved@example.com');
+      expect(res.body.password).toBeUndefined();
+      expect(res.body.emailDelivery.status).toBe('skipped');
+      expect(approve).toHaveBeenCalledWith(12, 1);
+    } finally {
+      if (originalResendApiKey === undefined) {
+        delete process.env.RESEND_API_KEY;
+      } else {
+        process.env.RESEND_API_KEY = originalResendApiKey;
+      }
+      if (originalEmailFrom === undefined) {
+        delete process.env.EMAIL_FROM;
+      } else {
+        process.env.EMAIL_FROM = originalEmailFrom;
+      }
+    }
   });
 
   it('lets an admin reject a pending registration', async () => {

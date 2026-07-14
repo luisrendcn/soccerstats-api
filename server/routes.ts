@@ -541,14 +541,14 @@ export async function registerRoutes(
       }
 
       const { password, ...safeUser } = user;
-      void trySendEmail("access approved", () =>
+      const emailDelivery = await trySendEmail("access approved", () =>
         notifyAccessApproved({
           email: user.email,
           name: user.name,
           role: user.role,
         }),
       );
-      res.status(201).json(safeUser);
+      res.status(201).json({ ...safeUser, emailDelivery });
     },
   );
 

@@ -19,6 +19,15 @@ export interface SafeUser extends Omit<User, "password"> {}
 export interface SafeRegistrationRequest
   extends Omit<RegistrationRequest, "password"> {}
 
+export type EmailDelivery = {
+  status: "sent" | "skipped" | "failed";
+  message?: string;
+};
+
+export type ReviewRegistrationResult =
+  | (SafeUser & { emailDelivery?: EmailDelivery })
+  | SafeRegistrationRequest;
+
 type UserUpdateInput = {
   id: number;
   name?: string;
@@ -64,7 +73,7 @@ export function useRegistrationRequests(enabled = true) {
 function useReviewRegistrationRequest(action: "approve" | "reject") {
   const queryClient = useQueryClient();
   return useMutation<
-    SafeUser | SafeRegistrationRequest,
+    ReviewRegistrationResult,
     Error,
     number,
     { snapshot: OptimisticSnapshot; predicate: QueryKeyPredicate }
@@ -103,8 +112,9 @@ function useReviewRegistrationRequest(action: "approve" | "reject") {
     },
     onSuccess: (result) => {
       if (action === "approve" && "role" in result) {
+        const { emailDelivery: _emailDelivery, ...safeUser } = result;
         updateOptimisticQueries(queryClient, usersPredicate, (data) =>
-          prependUniqueArrayItem(data, result as SafeUser),
+          prependUniqueArrayItem(data, safeUser as SafeUser),
         );
       }
     },
