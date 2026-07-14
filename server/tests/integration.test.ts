@@ -721,10 +721,20 @@ describe('Authorization edge cases', () => {
 
   it('lets an admin approve a pending registration', async () => {
     const approve = vi.spyOn(storage, 'approveRegistrationRequest');
-    const originalResendApiKey = process.env.RESEND_API_KEY;
-    const originalEmailFrom = process.env.EMAIL_FROM;
-    delete process.env.RESEND_API_KEY;
-    delete process.env.EMAIL_FROM;
+    const emailEnvKeys = [
+      'EMAIL_HOST',
+      'EMAIL_PORT',
+      'EMAIL_SECURE',
+      'EMAIL_USER',
+      'EMAIL_PASSWORD',
+      'EMAIL_FROM',
+    ];
+    const originalEmailEnv = new Map(
+      emailEnvKeys.map((key) => [key, process.env[key]]),
+    );
+    emailEnvKeys.forEach((key) => {
+      delete process.env[key];
+    });
 
     try {
       const res = await request(app)
@@ -736,15 +746,12 @@ describe('Authorization edge cases', () => {
       expect(res.body.emailDelivery.status).toBe('skipped');
       expect(approve).toHaveBeenCalledWith(12, 1);
     } finally {
-      if (originalResendApiKey === undefined) {
-        delete process.env.RESEND_API_KEY;
-      } else {
-        process.env.RESEND_API_KEY = originalResendApiKey;
-      }
-      if (originalEmailFrom === undefined) {
-        delete process.env.EMAIL_FROM;
-      } else {
-        process.env.EMAIL_FROM = originalEmailFrom;
+      for (const [key, value] of originalEmailEnv) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
       }
     }
   });

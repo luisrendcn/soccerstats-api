@@ -22,15 +22,17 @@ services:
         value: 10000
       - key: APP_PUBLIC_BASE_URL
         value: https://soccer-stats-api.onrender.com
-      - key: RESEND_API_KEY
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: "465"
+      - key: EMAIL_SECURE
+        value: "true"
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
         sync: false
       - key: EMAIL_FROM
-        sync: false
-      - key: MAILGUN_API_KEY
-        sync: false
-      - key: MAILGUN_DOMAIN
-        sync: false
-      - key: MAILGUN_FROM
         sync: false
       - key: ADMIN_NOTIFY_EMAIL
         sync: false

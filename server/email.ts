@@ -1,3 +1,5 @@
+import nodemailer from "nodemailer";
+
 type MailMessage = {
   to: string;
   subject: string;
@@ -18,49 +20,42 @@ const appUrl =
 
 function mailConfig() {
   return {
-    mailgunApiKey: process.env.MAILGUN_API_KEY,
-    mailgunDomain: process.env.MAILGUN_DOMAIN,
-    mailgunFrom: process.env.MAILGUN_FROM,
-    resendApiKey: process.env.RESEND_API_KEY,
-    emailFrom: process.env.EMAIL_FROM,
+    emailHost: process.env.EMAIL_HOST || "smtp.gmail.com",
+    emailPort: Number(process.env.EMAIL_PORT || 465),
+    emailSecure: process.env.EMAIL_SECURE !== "false",
+    emailUser: process.env.EMAIL_USER,
+    emailPassword: process.env.EMAIL_PASSWORD,
+    emailFrom: process.env.EMAIL_FROM || process.env.EMAIL_USER,
     adminNotifyEmail: process.env.ADMIN_NOTIFY_EMAIL,
   };
 }
 
 export function isEmailConfigured() {
-  const { mailgunApiKey, mailgunDomain, mailgunFrom, resendApiKey, emailFrom } =
+  const { emailHost, emailPort, emailUser, emailPassword, emailFrom } =
     mailConfig();
   return Boolean(
-    (mailgunApiKey && mailgunDomain && mailgunFrom) ||
-      (resendApiKey && emailFrom),
+    emailHost && Number.isFinite(emailPort) && emailUser && emailPassword && emailFrom,
   );
 }
 
 async function sendMail({ to, subject, text, html }: MailMessage) {
   const {
-    mailgunApiKey,
-    mailgunDomain,
-    mailgunFrom,
-    resendApiKey,
+    emailHost,
+    emailPort,
+    emailSecure,
+    emailUser,
+    emailPassword,
     emailFrom,
   } = mailConfig();
 
-  if (resendApiKey && emailFrom) {
-    return sendResendMail({
-      apiKey: resendApiKey,
+  if (emailHost && Number.isFinite(emailPort) && emailUser && emailPassword && emailFrom) {
+    return sendSmtpMail({
+      host: emailHost,
+      port: emailPort,
+      secure: emailSecure,
+      user: emailUser,
+      password: emailPassword,
       from: emailFrom,
-      to,
-      subject,
-      text,
-      html,
-    });
-  }
-
-  if (mailgunApiKey && mailgunDomain && mailgunFrom) {
-    return sendMailgunMail({
-      apiKey: mailgunApiKey,
-      domain: mailgunDomain,
-      from: mailgunFrom,
       to,
       subject,
       text,
@@ -70,85 +65,48 @@ async function sendMail({ to, subject, text, html }: MailMessage) {
 
   {
     console.warn(
-      `Email not sent to ${to}: configure RESEND_API_KEY and EMAIL_FROM.`,
+      `Email not sent to ${to}: configure EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD and EMAIL_FROM.`,
     );
     return { skipped: true };
   }
 }
 
-async function sendMailgunMail({
-  apiKey,
-  domain,
+async function sendSmtpMail({
+  host,
+  port,
+  secure,
+  user,
+  password,
   from,
   to,
   subject,
   text,
   html,
 }: MailMessage & {
-  apiKey: string;
-  domain: string;
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  password: string;
   from: string;
 }) {
-  const body = new URLSearchParams();
-  body.set("from", from);
-  body.set("to", to);
-  body.set("subject", subject);
-  body.set("text", text);
-  if (html) body.set("html", html);
-
-  const auth = Buffer.from(`api:${apiKey}`).toString("base64");
-  const response = await fetch(
-    `https://api.mailgun.net/v3/${encodeURIComponent(domain)}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${auth}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body,
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: {
+      user,
+      pass: password,
     },
-  );
-
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Mailgun failed: ${response.status} ${detail}`);
-  }
-
-  return response.json();
-}
-
-async function sendResendMail({
-  apiKey,
-  from,
-  to,
-  subject,
-  text,
-  html,
-}: MailMessage & {
-  apiKey: string;
-  from: string;
-}) {
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to,
-      subject,
-      text,
-      html,
-    }),
   });
 
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Email provider failed: ${response.status} ${detail}`);
-  }
-
-  return response.json();
+  return transporter.sendMail({
+    from,
+    to,
+    subject,
+    text,
+    html,
+  });
 }
 
 function roleLabel(role: string) {
@@ -295,8 +253,12 @@ function isSkippedEmail(result: unknown): result is { skipped: true } {
 
 function emailFailureMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes("You can only send testing emails")) {
-    return "La cuenta fue aprobada, pero Resend no envio el correo porque el remitente de prueba solo permite enviar al correo verificado. Verifica un dominio en Resend y usa EMAIL_FROM con un correo de ese dominio.";
+  if (
+    message.includes("Invalid login") ||
+    message.includes("Username and Password not accepted") ||
+    message.includes("535")
+  ) {
+    return "La cuenta fue aprobada, pero Gmail rechazo el envio. Verifica que EMAIL_USER use una cuenta Gmail valida y que EMAIL_PASSWORD sea una contrasena de aplicacion.";
   }
-  return "La cuenta fue aprobada, pero no se pudo enviar el correo de notificacion. Revisa la configuracion del proveedor de email.";
+  return "La cuenta fue aprobada, pero no se pudo enviar el correo de notificacion. Revisa la configuracion SMTP de Gmail.";
 }
