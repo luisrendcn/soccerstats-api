@@ -103,7 +103,7 @@ describe("Gmail API email delivery", () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: false,
       status: 400,
-      text: async () => '{"error":"invalid_grant"}',
+      text: async () => '{"error":"invalid_client"}',
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -120,6 +120,8 @@ describe("Gmail API email delivery", () => {
       success: false,
       provider: "gmail-api",
     });
+    expect(delivery.message).toContain("GOOGLE_CLIENT_ID");
+    expect(delivery.message).toContain("GOOGLE_CLIENT_SECRET");
     expect(JSON.stringify(delivery)).not.toContain("test-client-secret");
     expect(JSON.stringify(delivery)).not.toContain("test-refresh-token");
   });

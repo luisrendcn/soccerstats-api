@@ -31,6 +31,7 @@ class EmailProviderError extends Error {
   constructor(
     public readonly provider: EmailProvider,
     message: string,
+    public readonly reason?: string,
   ) {
     super(message);
     this.name = "EmailProviderError";
@@ -270,9 +271,11 @@ async function sendGmailApiMail({
 
   if (!response.ok) {
     const detail = await response.text();
+    const error = parseGoogleError(detail);
     throw new EmailProviderError(
       "gmail-api",
-      `Gmail API send failed: ${response.status} ${detail}`,
+      `Gmail API send failed: ${response.status}${error ? ` ${error}` : ""}`,
+      error,
     );
   }
 
@@ -302,9 +305,11 @@ async function getGmailAccessToken({
 
   if (!response.ok) {
     const detail = await response.text();
+    const error = parseGoogleError(detail);
     throw new EmailProviderError(
       "gmail-api",
-      `Gmail API token failed: ${response.status} ${detail}`,
+      `Gmail API token failed: ${response.status}${error ? ` ${error}` : ""}`,
+      error,
     );
   }
 
@@ -369,6 +374,21 @@ function toBase64Lines(value: string) {
     .toString("base64")
     .replace(/.{1,76}/g, "$&\r\n")
     .trim();
+}
+
+function parseGoogleError(detail: string) {
+  try {
+    const parsed = JSON.parse(detail) as {
+      error?: string | { status?: string; message?: string };
+      error_description?: string;
+    };
+    if (typeof parsed.error === "string") return parsed.error;
+    if (parsed.error?.status) return parsed.error.status;
+    if (parsed.error?.message) return parsed.error.message;
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function sendSmtpMail({
@@ -584,10 +604,21 @@ function emailProviderFromError(error: unknown): EmailProvider {
 
 function emailFailureMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
+  const reason =
+    error instanceof EmailProviderError ? error.reason || "" : "";
   if (message.includes("Gmail API token failed")) {
+    if (reason === "invalid_client") {
+      return "La cuenta fue aprobada, pero Google rechazo las credenciales OAuth: GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET no son validos o no corresponden entre si.";
+    }
+    if (reason === "invalid_grant") {
+      return "La cuenta fue aprobada, pero Google rechazo GOOGLE_REFRESH_TOKEN. Genera un refresh token nuevo para la misma cuenta y el mismo cliente OAuth.";
+    }
     return "La cuenta fue aprobada, pero Gmail API rechazo la autenticacion OAuth. Revisa GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET y GOOGLE_REFRESH_TOKEN.";
   }
   if (message.includes("Gmail API send failed")) {
+    if (reason === "PERMISSION_DENIED") {
+      return "La cuenta fue aprobada, pero Gmail API no tiene permisos suficientes para enviar correos. Revisa que el refresh token tenga el alcance de Gmail para enviar mensajes.";
+    }
     return "La cuenta fue aprobada, pero Gmail API no pudo enviar el correo. Revisa permisos OAuth de Gmail y el remitente configurado.";
   }
   if (
