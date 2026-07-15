@@ -285,7 +285,7 @@ app.use((req, res, next) => {
     await db.execute(sql`ALTER TABLE match_highlights ADD COLUMN IF NOT EXISTS duration_seconds integer`);
     await db.execute(sql`ALTER TABLE match_highlights ADD COLUMN IF NOT EXISTS file_size_bytes integer`);
     const count = await db.execute(sql`SELECT count(*) FROM teams`);
-    console.log("Migration complete, teams count query result:", count);
+    console.log("Migration complete", { teamsCount: count.rows?.[0]?.count });
   } catch (err) {
     console.error("Migration error", err);
     throw err;
@@ -311,8 +311,10 @@ app.use((req, res, next) => {
   }
 
   const port = Number(process.env.PORT) || 5000;
+  const host = process.env.HOST || "0.0.0.0";
+  const displayHost = host === "0.0.0.0" ? "localhost" : host;
 
-  httpServer.listen(port, () => {
-    log(`Server running on http://localhost:${port}`);
+  httpServer.listen(port, host, () => {
+    log(`Server running on http://${displayHost}:${port}`);
   });
 })();
