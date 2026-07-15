@@ -58,29 +58,20 @@ export function isTwitchStreamVisible(
   streamStatus?: TwitchStreamStatus,
 ) {
   if (!getTwitchChannelFromMatch(match)) return false;
+  if (match.status !== "live") return false;
 
   if (!streamStatus) {
-    return match.status === "live";
+    return true;
   }
 
   if (streamStatus.configured === false) {
-    return match.status === "live";
+    return true;
   }
 
   if (streamStatus.isLive === true) {
     return true;
   }
-
-  if (!streamStatus.graceExpiresAt) {
-    return false;
-  }
-
-  const graceExpiresAt = new Date(streamStatus.graceExpiresAt).getTime();
-  return (
-    Number.isFinite(graceExpiresAt) &&
-    Date.now() <= graceExpiresAt &&
-    (match.status === "live" || match.status === "finished")
-  );
+  return false;
 }
 
 export function TwitchStreamCard({
@@ -96,8 +87,8 @@ export function TwitchStreamCard({
     queryKey: getTwitchStreamQueryKey(channel),
     queryFn: () => fetchTwitchStreamStatus(channel!),
     enabled: Boolean(channel),
-    staleTime: 60_000,
-    refetchInterval: 60_000,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
     retry: false,
   });
 
@@ -147,7 +138,7 @@ export function TwitchStreamCard({
       <div className="space-y-3 p-4">
         {isRecentlyOffline && (
           <p className="text-sm text-muted-foreground">
-            {t("recentlyEndedStream")}
+            {t("streamOffline")}
           </p>
         )}
         {streamStatus?.stream?.title && (

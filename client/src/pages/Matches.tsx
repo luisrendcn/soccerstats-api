@@ -44,7 +44,7 @@ export default function Matches() {
     );
 
   const streamMatches = enrichedMatches?.filter(
-    (match) => Boolean(getTwitchChannelFromMatch(match)),
+    (match) => match.status === "live" && Boolean(getTwitchChannelFromMatch(match)),
   ) || [];
   const streamStatusQueries = useQueries({
     queries: streamMatches.map((match) => {
@@ -52,8 +52,8 @@ export default function Matches() {
       return {
         queryKey: getTwitchStreamQueryKey(channel),
         queryFn: () => fetchTwitchStreamStatus(channel),
-        staleTime: 60_000,
-        refetchInterval: 60_000,
+        staleTime: 15_000,
+        refetchInterval: 15_000,
         retry: false,
       };
     }),
