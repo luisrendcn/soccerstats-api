@@ -1,3 +1,5 @@
+import { normalizeTeamColor } from "@shared/team-colors";
+
 type SpreadsheetRow = Record<string, string>;
 
 export type TeamImportRow = {
@@ -57,18 +59,21 @@ export async function readSpreadsheetRows(file: File): Promise<SpreadsheetRow[]>
 export async function parseTeamImportFile(file: File): Promise<TeamImportRow[]> {
   const rows = await readSpreadsheetRows(file);
   return rows
-    .map((row) => ({
-      name: get(row, ["equipo", "nombre equipo", "team", "team name", "nombre"]),
-      color: get(row, ["color", "team color", "color equipo"]) || undefined,
-      twitchChannel:
-        get(row, [
-          "twitch",
-          "canal twitch",
-          "twitch channel",
-          "canal",
-          "stream",
-        ]) || undefined,
-    }))
+    .map((row) => {
+      const color = get(row, ["color", "team color", "color equipo"]);
+      return {
+        name: get(row, ["equipo", "nombre equipo", "team", "team name", "nombre"]),
+        color: color ? normalizeTeamColor(color) || color : undefined,
+        twitchChannel:
+          get(row, [
+            "twitch",
+            "canal twitch",
+            "twitch channel",
+            "canal",
+            "stream",
+          ]) || undefined,
+      };
+    })
     .filter((row) => row.name);
 }
 

@@ -27,6 +27,7 @@ import {
   updateMatchHighlightSchema,
 } from "@shared/schema";
 import { z } from "zod/v4";
+import { normalizeTeamColor, supportedTeamColorNames } from "@shared/team-colors";
 
 const userRoleSchema = z.enum([
   "admin",
@@ -217,17 +218,32 @@ const hexColorSchema = z
   .trim()
   .regex(/^#[0-9a-fA-F]{6}$/, "El color debe estar en formato HEX, por ejemplo #1d4ed8");
 
+const teamColorSchema = z
+  .string()
+  .trim()
+  .optional()
+  .transform((value, ctx) => {
+    if (!value) return "#000000";
+    const normalized = normalizeTeamColor(value);
+    if (!normalized) {
+      ctx.addIssue({
+        code: "custom",
+        message: `El color debe ser HEX o un nombre válido, por ejemplo: ${supportedTeamColorNames
+          .slice(0, 8)
+          .join(", ")}`,
+      });
+      return z.NEVER;
+    }
+    return normalized;
+  })
+  .pipe(hexColorSchema);
+
 const importTournamentTeamsSchema = z.object({
   teams: z
     .array(
       z.object({
         name: z.string().trim().min(1, "El nombre del equipo es requerido").max(100),
-        color: z
-          .string()
-          .trim()
-          .optional()
-          .transform((value) => value || "#000000")
-          .pipe(hexColorSchema),
+        color: teamColorSchema,
         twitchChannel: z.string().trim().optional().nullable(),
       }),
     )

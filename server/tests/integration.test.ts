@@ -383,7 +383,7 @@ describe('Integration: basic endpoints (mocked storage)', () => {
       .send({
         teams: [
           { name: 'Team A', color: '#111111' },
-          { name: 'Imported FC', color: '#222222' },
+          { name: 'Imported FC', color: 'rojo' },
           { name: 'Imported FC', color: '#333333' },
         ],
       });
@@ -393,7 +393,7 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(res.body.created).toHaveLength(1);
     expect(res.body.skipped).toHaveLength(1);
     expect(createTeam).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Imported FC' }),
+      expect.objectContaining({ name: 'Imported FC', color: '#dc2626' }),
     );
     expect(enrollTeam).toHaveBeenCalledWith(42, 1, { twitchChannel: null });
   });
