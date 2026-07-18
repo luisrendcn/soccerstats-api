@@ -40,6 +40,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
     description: "",
     backgroundImageUrl: "",
     tournamentType: "soccer" as "soccer" | "videogame",
+    tournamentFormat: "league" as "league" | "classic_world_cup",
     startDate: "",
     endDate: "",
     status: "draft" as "draft" | "active" | "finished",
@@ -57,6 +58,9 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
         tournamentType:
           (existingTournament.tournamentType as "soccer" | "videogame") ||
           "soccer",
+        tournamentFormat:
+          (existingTournament.tournamentFormat as "league" | "classic_world_cup") ||
+          "league",
         startDate: existingTournament.startDate
           ? new Date(existingTournament.startDate).toISOString().split("T")[0]
           : "",
@@ -149,6 +153,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
         description: formData.description || undefined,
         backgroundImageUrl,
         tournamentType: formData.tournamentType,
+        tournamentFormat: formData.tournamentFormat,
         startDate: new Date(formData.startDate).toISOString(),
         endDate: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
         status: formData.status,
@@ -288,6 +293,28 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
             <p className="text-xs text-muted-foreground">
               {t("videogameTournamentHint")}
             </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tournamentFormat">{t("tournamentFormat")} *</Label>
+            <Select
+              value={formData.tournamentFormat}
+              disabled={Boolean(tournamentId && existingTournament?.status !== "draft")}
+              onValueChange={(value) =>
+                setFormData({
+                  ...formData,
+                  tournamentFormat: value as "league" | "classic_world_cup",
+                })
+              }
+            >
+              <SelectTrigger id="tournamentFormat">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="league">{t("leagueFormat")}</SelectItem>
+                <SelectItem value="classic_world_cup">{t("classicWorldCup")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

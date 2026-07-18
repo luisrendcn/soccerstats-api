@@ -2,8 +2,10 @@ import {
   useTournament,
   useTournamentTeams,
   useAddTeamToTournament,
+  useClassicWorldCupSummary,
   useCreateTournamentTeam,
   useGenerateTournamentMatches,
+  useGenerateWorldCupRoundOf16,
   useImportTournamentTeams,
   useRemoveTeamFromTournament,
 } from "@/hooks/use-tournaments";
@@ -63,6 +65,7 @@ import { useLanguage } from "@/lib/i18n.tsx";
 import { parseTeamImportFile } from "@/lib/spreadsheet-import";
 import { APP_TIME_ZONE, zonedLocalDateTimeToUtcIso } from "@shared/time";
 import { PressHelp } from "@/components/PressHelp";
+import { ClassicWorldCupView } from "@/components/ClassicWorldCupView";
 
 interface TournamentDetailsProps {
   tournamentId: number;
@@ -94,6 +97,7 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const createTeam = useCreateTournamentTeam();
   const importTeams = useImportTournamentTeams();
   const generateMatches = useGenerateTournamentMatches();
+  const generateRoundOf16 = useGenerateWorldCupRoundOf16();
   const removeTeam = useRemoveTeamFromTournament();
   const deleteMatch = useDeleteMatch();
   
@@ -112,6 +116,11 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const [scheduleIntervalDays, setScheduleIntervalDays] = useState("7");
   const [scheduleLocation, setScheduleLocation] = useState("");
   const isVideogameTournament = tournament?.tournamentType === "videogame";
+  const isClassicWorldCup = tournament?.tournamentFormat === "classic_world_cup";
+  const {
+    data: worldCupSummary,
+    isLoading: worldCupSummaryLoading,
+  } = useClassicWorldCupSummary(tournamentId, Boolean(isClassicWorldCup));
   const canDeleteMatches = auth?.userRole === "admin";
 
   const enrichedMatches = matches
@@ -367,7 +376,9 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const availableTeams = teams?.filter((team) => !tournamentTeamIds.has(team.id)) || [];
   const teamCount = tournamentTeams?.length || 0;
   const hasOddTeamCount = teamCount > 0 && teamCount % 2 !== 0;
-  const canGenerateSchedule = teamCount >= 2 && !hasOddTeamCount;
+  const canGenerateSchedule = isClassicWorldCup
+    ? teamCount === 32
+    : teamCount >= 2 && !hasOddTeamCount;
   const defaultScheduleDate = tournament.startDate
     ? new Date(tournament.startDate).toISOString().split("T")[0]
     : "";
@@ -417,8 +428,29 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
         </Card>
       )}
 
-      {/* standings for this tournament */}
-      <StandingsTable tournamentId={tournamentId} title={standingsTitle} />
+      {isClassicWorldCup ? (
+        <ClassicWorldCupView
+          summary={worldCupSummary}
+          isLoading={worldCupSummaryLoading}
+          canManage={canManageTournaments}
+          isGeneratingRoundOf16={generateRoundOf16.isPending}
+          onGenerateRoundOf16={async () => {
+            try {
+              await generateRoundOf16.mutateAsync(tournamentId);
+              toast({ title: t("roundOf16Generated") });
+            } catch (error) {
+              toast({
+                variant: "destructive",
+                title: t("error"),
+                description:
+                  error instanceof Error ? error.message : t("unexpectedError"),
+              });
+            }
+          }}
+        />
+      ) : (
+        <StandingsTable tournamentId={tournamentId} title={standingsTitle} />
+      )}
 
       <section className="space-y-5">
         <div>
@@ -697,7 +729,9 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                     title={
                       hasOddTeamCount
                         ? t("oddTeamsBlocked")
-                        : teamCount < 2
+                        : isClassicWorldCup && teamCount !== 32
+                          ? t("classicWorldCupRequires32")
+                          : teamCount < 2
                           ? t("atLeastTwoTeamsNeeded")
                           : t("generateAutomaticSchedule")
                     }
@@ -801,7 +835,13 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
             </div>
           )}
 
-          {hasOddTeamCount && (
+          {isClassicWorldCup && teamCount !== 32 && (
+            <Card className="border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              {t("classicWorldCupRequires32")}
+            </Card>
+          )}
+
+          {!isClassicWorldCup && hasOddTeamCount && (
             <Card className="border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
               {t("oddTeamsBlocked")}
             </Card>

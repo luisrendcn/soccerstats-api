@@ -21,8 +21,8 @@ export const players = pgTable("players", {
 
 export const matches = pgTable("matches", {
   id: serial("id").primaryKey(),
-  homeTeamId: integer("home_team_id").notNull(),
-  awayTeamId: integer("away_team_id").notNull(),
+  homeTeamId: integer("home_team_id"),
+  awayTeamId: integer("away_team_id"),
   // optionally associate a match with a tournament
   tournamentId: integer("tournament_id"),
   homeScore: integer("home_score").default(0),
@@ -33,6 +33,27 @@ export const matches = pgTable("matches", {
   streamPlatform: text("stream_platform"),
   streamChannel: text("stream_channel"),
   streamUrl: text("stream_url"),
+  tournamentPhase: text("tournament_phase"),
+  groupId: integer("group_id"),
+  roundNumber: integer("round_number"),
+  bracketCode: text("bracket_code"),
+  matchOrder: integer("match_order"),
+  regulationHomeScore: integer("regulation_home_score"),
+  regulationAwayScore: integer("regulation_away_score"),
+  extraTimeHomeScore: integer("extra_time_home_score"),
+  extraTimeAwayScore: integer("extra_time_away_score"),
+  penaltyHomeScore: integer("penalty_home_score"),
+  penaltyAwayScore: integer("penalty_away_score"),
+  winnerTeamId: integer("winner_team_id"),
+  victoryMethod: text("victory_method"),
+  homeSourceMatchId: integer("home_source_match_id"),
+  awaySourceMatchId: integer("away_source_match_id"),
+  homeSourceType: text("home_source_type"),
+  awaySourceType: text("away_source_type"),
+  winnerAdvancesToMatchId: integer("winner_advances_to_match_id"),
+  loserAdvancesToMatchId: integer("loser_advances_to_match_id"),
+  winnerAdvancesToSlot: text("winner_advances_to_slot"),
+  loserAdvancesToSlot: text("loser_advances_to_slot"),
   deletedAt: timestamp("deleted_at"),
 });
 
@@ -114,9 +135,14 @@ export const tournaments = pgTable("tournaments", {
   description: text("description"),
   backgroundImageUrl: text("background_image_url"),
   tournamentType: text("tournament_type").notNull().default("soccer"),
+  tournamentFormat: text("tournament_format").notNull().default("league"),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date"),
   status: text("status").notNull().default("draft"), // draft, active, finished
+  championTeamId: integer("champion_team_id"),
+  runnerUpTeamId: integer("runner_up_team_id"),
+  thirdPlaceTeamId: integer("third_place_team_id"),
+  fourthPlaceTeamId: integer("fourth_place_team_id"),
   createdBy: integer("created_by").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -128,6 +154,25 @@ export const tournamentTeams = pgTable("tournament_teams", {
   tournamentId: integer("tournament_id").notNull(),
   teamId: integer("team_id").notNull(),
   twitchChannel: text("twitch_channel"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const worldCupGroups = pgTable("world_cup_groups", {
+  id: serial("id").primaryKey(),
+  tournamentId: integer("tournament_id").notNull(),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull(),
+  status: text("status").notNull().default("scheduled"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const worldCupGroupTeams = pgTable("world_cup_group_teams", {
+  id: serial("id").primaryKey(),
+  tournamentId: integer("tournament_id").notNull(),
+  groupId: integer("group_id").notNull(),
+  teamId: integer("team_id").notNull(),
+  seed: integer("seed").notNull(),
+  manualRank: integer("manual_rank"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -221,6 +266,7 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 
 export const tournamentsRelations = relations(tournaments, ({ many }) => ({
   tournamentTeams: many(tournamentTeams),
+  worldCupGroups: many(worldCupGroups),
 }));
 
 export const tournamentTeamsRelations = relations(tournamentTeams, ({ one }) => ({
@@ -230,6 +276,29 @@ export const tournamentTeamsRelations = relations(tournamentTeams, ({ one }) => 
   }),
   team: one(teams, {
     fields: [tournamentTeams.teamId],
+    references: [teams.id],
+  }),
+}));
+
+export const worldCupGroupsRelations = relations(worldCupGroups, ({ one, many }) => ({
+  tournament: one(tournaments, {
+    fields: [worldCupGroups.tournamentId],
+    references: [tournaments.id],
+  }),
+  teams: many(worldCupGroupTeams),
+}));
+
+export const worldCupGroupTeamsRelations = relations(worldCupGroupTeams, ({ one }) => ({
+  tournament: one(tournaments, {
+    fields: [worldCupGroupTeams.tournamentId],
+    references: [tournaments.id],
+  }),
+  group: one(worldCupGroups, {
+    fields: [worldCupGroupTeams.groupId],
+    references: [worldCupGroups.id],
+  }),
+  team: one(teams, {
+    fields: [worldCupGroupTeams.teamId],
     references: [teams.id],
   }),
 }));
@@ -353,14 +422,26 @@ export const registerSchema = z
     }
   });
 
+export const tournamentFormatSchema = z.enum(["league", "classic_world_cup"]);
+export const tournamentLifecycleStatusSchema = z.enum([
+  "draft",
+  "pending",
+  "scheduled",
+  "in_progress",
+  "completed",
+  "active",
+  "finished",
+]);
+
 export const createTournamentSchema = z.object({
   name: z.string().min(2, "El nombre es requerido").max(100),
   description: z.string().optional(),
   backgroundImageUrl: z.string().url().optional().nullable(),
   tournamentType: z.enum(["soccer", "videogame"]).default("soccer"),
+  tournamentFormat: tournamentFormatSchema.default("league"),
   startDate: z.date().or(z.string().datetime()),
   endDate: z.date().or(z.string().datetime()).optional(),
-  status: z.enum(["draft", "active", "finished"]).default("draft"),
+  status: tournamentLifecycleStatusSchema.default("draft"),
 });
 
 export const updateTournamentSchema = createTournamentSchema.partial();
@@ -385,6 +466,21 @@ const streamUrlSchema = z
   }, "Pega un enlace válido de Twitch");
 
 export const matchStatusSchema = z.enum(["scheduled", "live", "finished"]);
+export const tournamentPhaseSchema = z.enum([
+  "group_stage",
+  "round_of_16",
+  "quarterfinals",
+  "semifinals",
+  "third_place",
+  "final",
+]);
+export const victoryMethodSchema = z.enum([
+  "regular_time",
+  "extra_time",
+  "penalties",
+  "walkover",
+  "manual_decision",
+]);
 export const localDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha del partido no es válida");
@@ -394,6 +490,8 @@ export const localTimeSchema = z
 
 export const createMatchSchema = insertMatchSchema.extend({
   status: matchStatusSchema.default("scheduled"),
+  tournamentPhase: tournamentPhaseSchema.optional().nullable(),
+  victoryMethod: victoryMethodSchema.optional().nullable(),
   streamPlatform: z.enum(["twitch"]).optional().nullable(),
   streamChannel: twitchChannelSchema.optional().nullable(),
   streamUrl: streamUrlSchema.optional().nullable(),
@@ -488,3 +586,5 @@ export type InsertTournament = z.infer<typeof insertTournamentSchema>;
 export type CreateTournamentInput = z.infer<typeof createTournamentSchema>;
 export type UpdateTournamentInput = z.infer<typeof updateTournamentSchema>;
 export type TournamentTeam = typeof tournamentTeams.$inferSelect;
+export type WorldCupGroup = typeof worldCupGroups.$inferSelect;
+export type WorldCupGroupTeam = typeof worldCupGroupTeams.$inferSelect;

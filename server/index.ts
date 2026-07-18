@@ -219,6 +219,29 @@ app.use((req, res, next) => {
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_platform text`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_channel text`);
     await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS stream_url text`);
+    await db.execute(sql`ALTER TABLE matches ALTER COLUMN home_team_id DROP NOT NULL`);
+    await db.execute(sql`ALTER TABLE matches ALTER COLUMN away_team_id DROP NOT NULL`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS tournament_phase text`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS group_id integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS round_number integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS bracket_code text`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS match_order integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS regulation_home_score integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS regulation_away_score integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS extra_time_home_score integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS extra_time_away_score integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS penalty_home_score integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS penalty_away_score integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS winner_team_id integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS victory_method text`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_source_match_id integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_source_match_id integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_source_type text`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_source_type text`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS winner_advances_to_match_id integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS loser_advances_to_match_id integer`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS winner_advances_to_slot text`);
+    await db.execute(sql`ALTER TABLE matches ADD COLUMN IF NOT EXISTS loser_advances_to_slot text`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS registration_requests (
         id serial PRIMARY KEY,
@@ -283,8 +306,55 @@ app.use((req, res, next) => {
       WHERE requested_role = 'team'
     `);
     await db.execute(sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS tournament_type text NOT NULL DEFAULT 'soccer'`);
+    await db.execute(sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS tournament_format text NOT NULL DEFAULT 'league'`);
     await db.execute(sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS background_image_url text`);
+    await db.execute(sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS champion_team_id integer`);
+    await db.execute(sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS runner_up_team_id integer`);
+    await db.execute(sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS third_place_team_id integer`);
+    await db.execute(sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS fourth_place_team_id integer`);
     await db.execute(sql`ALTER TABLE tournament_teams ADD COLUMN IF NOT EXISTS twitch_channel text`);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS world_cup_groups (
+        id serial PRIMARY KEY,
+        tournament_id integer NOT NULL,
+        name text NOT NULL,
+        sort_order integer NOT NULL,
+        status text NOT NULL DEFAULT 'scheduled',
+        created_at timestamp DEFAULT now()
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS world_cup_group_teams (
+        id serial PRIMARY KEY,
+        tournament_id integer NOT NULL,
+        group_id integer NOT NULL,
+        team_id integer NOT NULL,
+        seed integer NOT NULL,
+        manual_rank integer,
+        created_at timestamp DEFAULT now()
+      )
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS world_cup_groups_tournament_order_idx
+      ON world_cup_groups (tournament_id, sort_order)
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS world_cup_groups_tournament_name_idx
+      ON world_cup_groups (tournament_id, name)
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS world_cup_group_teams_unique_team_idx
+      ON world_cup_group_teams (tournament_id, team_id)
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS world_cup_group_teams_unique_seed_idx
+      ON world_cup_group_teams (group_id, seed)
+    `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS matches_tournament_bracket_code_idx
+      ON matches (tournament_id, bracket_code)
+      WHERE bracket_code IS NOT NULL AND deleted_at IS NULL
+    `);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS match_highlights (
         id serial PRIMARY KEY,

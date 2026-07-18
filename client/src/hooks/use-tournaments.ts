@@ -382,6 +382,83 @@ export function useGenerateTournamentMatches() {
   });
 }
 
+export type ClassicWorldCupSummary = {
+  tournament: Tournament;
+  groups: Array<{
+    id: number;
+    name: string;
+    sortOrder: number;
+    status: string;
+    teams: Array<Team & { seed: number }>;
+    standings: Array<{
+      teamId: number;
+      teamName: string;
+      groupName: string;
+      position: number;
+      played: number;
+      wins: number;
+      draws: number;
+      losses: number;
+      goalsFor: number;
+      goalsAgainst: number;
+      goalDifference: number;
+      points: number;
+      tieBreakNote?: string;
+      unresolvedTie?: boolean;
+    }>;
+    matches: any[];
+  }>;
+  knockoutMatches: any[];
+  finalClassification: {
+    championTeamId: number | null;
+    runnerUpTeamId: number | null;
+    thirdPlaceTeamId: number | null;
+    fourthPlaceTeamId: number | null;
+  };
+};
+
+export function useClassicWorldCupSummary(tournamentId: number, enabled = true) {
+  return useQuery({
+    queryKey: ["tournaments", tournamentId, "world-cup"],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/tournaments/${tournamentId}/world-cup`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.message || "Failed to fetch World Cup summary");
+      }
+      return res.json() as Promise<ClassicWorldCupSummary>;
+    },
+    enabled: enabled && !!tournamentId,
+    retry: false,
+  });
+}
+
+export function useGenerateWorldCupRoundOf16() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (tournamentId: number) => {
+      const res = await apiFetch(`/api/tournaments/${tournamentId}/world-cup/round-of-16`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.message || "Failed to generate round of 16");
+      }
+      return res.json() as Promise<ClassicWorldCupSummary>;
+    },
+    onSuccess: (_summary, tournamentId) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["tournaments", tournamentId, "world-cup"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      refreshAppData(queryClient);
+    },
+  });
+}
+
 export function useRemoveTeamFromTournament() {
   const queryClient = useQueryClient();
   return useMutation<

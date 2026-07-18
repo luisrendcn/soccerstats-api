@@ -11,7 +11,7 @@
     "build": "cross-env NODE_ENV=production tsx script/build.ts",
     "build:ci": "npm ci --include=dev && npm run check && npm test && npm run build",
     "start": "cross-env NODE_ENV=production node dist/index.mjs",
-    "test": "vitest run --root . server/tests/auth.test.ts server/tests/standings.test.ts server/tests/integration.test.ts",
+    "test": "vitest run --root . server/tests/auth.test.ts server/tests/standings.test.ts server/tests/integration.test.ts server/tests/world-cup.test.ts",
     "test:real-db": "cross-env RUN_REAL_DB_TESTS=true vitest run --root . server/tests/real-db.test.ts",
     "check": "tsc --noEmit",
     "db:push": "drizzle-kit push",

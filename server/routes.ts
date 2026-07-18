@@ -28,6 +28,15 @@ import {
   APP_TIME_ZONE,
   zonedLocalDateTimeToUtcDate,
 } from "@shared/time";
+import {
+  advanceClassicWorldCupMatch,
+  ensureClassicWorldCupMatchCanFinish,
+  fillRoundOf16FromGroups,
+  generateClassicWorldCup,
+  getClassicWorldCupSummary,
+  hasDownstreamFinishedMatch,
+  setClassicWorldCupGroupManualRanks,
+} from "./world-cup";
 
 const userRoleSchema = z.enum([
   "admin",
@@ -63,6 +72,17 @@ const MAX_HIGHLIGHT_THUMBNAIL_FILE_SIZE_BYTES =
   Number(process.env.HIGHLIGHT_THUMBNAIL_MAX_FILE_SIZE_MB || 5) * 1024 * 1024;
 const MAX_TOURNAMENT_BACKGROUND_FILE_SIZE_BYTES =
   Number(process.env.TOURNAMENT_BACKGROUND_MAX_FILE_SIZE_MB || 5) * 1024 * 1024;
+const worldCupManualRanksSchema = z.object({
+  ranks: z
+    .array(
+      z.object({
+        teamId: z.number().int().positive(),
+        manualRank: z.number().int().min(1).max(4),
+      }),
+    )
+    .min(1)
+    .max(4),
+});
 const TWITCH_STREAM_GRACE_MS = 60 * 60 * 1000;
 const twitchTokenCache: { token: string | null; expiresAt: number } = {
   token: null,
@@ -542,8 +562,8 @@ async function matchNotificationRecipients(match: Match, tournament?: Tournament
 
 async function matchNotificationText(match: Match) {
   const [homeTeam, awayTeam, tournament] = await Promise.all([
-    storage.getTeam(match.homeTeamId),
-    storage.getTeam(match.awayTeamId),
+    match.homeTeamId ? storage.getTeam(match.homeTeamId) : Promise.resolve(null),
+    match.awayTeamId ? storage.getTeam(match.awayTeamId) : Promise.resolve(null),
     match.tournamentId ? storage.getTournamentById(match.tournamentId) : Promise.resolve(null),
   ]);
   const matchup = `${homeTeam?.name || "Equipo local"} vs ${awayTeam?.name || "Equipo visitante"}`;
@@ -1445,14 +1465,34 @@ export async function registerRoutes(
       if (updateData.endDate && typeof updateData.endDate === "string") {
         updateData.endDate = new Date(updateData.endDate);
       }
+      if (
+        updateData.tournamentFormat &&
+        updateData.tournamentFormat !== manageableTournament.tournamentFormat
+      ) {
+        const existingMatches = (await storage.getMatches()).filter(
+          (match) => match.tournamentId === tournamentId,
+        );
+        if (existingMatches.length > 0) {
+          return res.status(400).json({
+            message:
+              "No se puede cambiar el formato cuando el torneo ya tiene calendario generado",
+          });
+        }
+      }
       if (updateData.status === "active") {
         const tournamentTeams = await storage.getTournamentTeams(tournamentId);
-        if (tournamentTeams.length < 2) {
+        if (manageableTournament.tournamentFormat === "classic_world_cup") {
+          if (tournamentTeams.length !== 32) {
+            return res.status(400).json({
+              message:
+                "Para generar un Mundial clásico deben estar registrados exactamente 32 equipos.",
+            });
+          }
+        } else if (tournamentTeams.length < 2) {
           return res.status(400).json({
             message: "Para iniciar un torneo se necesitan al menos dos equipos inscritos",
           });
-        }
-        if (tournamentTeams.length % 2 !== 0) {
+        } else if (tournamentTeams.length % 2 !== 0) {
           return res.status(400).json({
             message:
               "No se puede iniciar el torneo con una cantidad impar de equipos",
@@ -1667,6 +1707,67 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/tournaments/:id/world-cup", async (req, res) => {
+    try {
+      const tournamentId = Number(req.params.id);
+      const tournament = await storage.getTournamentById(tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ message: "Torneo no encontrado" });
+      }
+      if (!(await publicCanReadTournament(req, tournament))) {
+        return denyBlockedTournamentForPublic(res);
+      }
+      if (tournament.tournamentFormat !== "classic_world_cup") {
+        return res.status(400).json({ message: "El torneo no es Mundial clásico" });
+      }
+      res.json(await getClassicWorldCupSummary(tournamentId));
+    } catch (err) {
+      throw err;
+    }
+  });
+
+  app.post("/api/tournaments/:id/world-cup/round-of-16", requireTournamentManager, async (req, res) => {
+    try {
+      const tournamentId = Number(req.params.id);
+      const tournament = await getManageableTournament(req, res, tournamentId);
+      if (!tournament) return;
+      if (tournament.tournamentFormat !== "classic_world_cup") {
+        return res.status(400).json({ message: "El torneo no es Mundial clásico" });
+      }
+      await fillRoundOf16FromGroups(tournamentId);
+      res.json(await getClassicWorldCupSummary(tournamentId));
+    } catch (error) {
+      res.status(400).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "No se pudieron generar los octavos",
+      });
+    }
+  });
+
+  app.post("/api/tournaments/:id/world-cup/groups/:groupId/manual-ranks", requireTournamentManager, async (req, res) => {
+    try {
+      const tournamentId = Number(req.params.id);
+      const groupId = Number(req.params.groupId);
+      const tournament = await getManageableTournament(req, res, tournamentId);
+      if (!tournament) return;
+      if (tournament.tournamentFormat !== "classic_world_cup") {
+        return res.status(400).json({ message: "El torneo no es Mundial clásico" });
+      }
+      const input = worldCupManualRanksSchema.parse(req.body);
+      await setClassicWorldCupGroupManualRanks(tournamentId, groupId, input.ranks);
+      res.json(await getClassicWorldCupSummary(tournamentId));
+    } catch (error) {
+      res.status(400).json({
+        message:
+          error instanceof Error
+            ? error.message
+            : "No se pudo guardar el desempate manual",
+      });
+    }
+  });
+
   app.post("/api/tournaments/:id/matches/generate", requireTournamentManager, async (req, res) => {
     try {
       const tournamentId = Number(req.params.id);
@@ -1675,6 +1776,29 @@ export async function registerRoutes(
 
       const input = generateTournamentMatchesSchema.parse(req.body);
       const tournamentTeams = await storage.getTournamentTeams(tournamentId);
+      if (tournament.tournamentFormat === "classic_world_cup") {
+        const startAt =
+          input.startDate && input.startTime
+            ? zonedLocalDateTimeToUtcDate(
+                input.startDate,
+                input.startTime,
+                input.timeZone || APP_TIME_ZONE,
+              )
+            : new Date(input.startAt!);
+        try {
+          const result = await generateClassicWorldCup(tournamentId, {
+            startAt,
+            intervalDays: input.intervalDays,
+            location: input.location || null,
+          });
+          return res.status(result.alreadyGenerated ? 200 : 201).json(result);
+        } catch (error) {
+          return res.status(400).json({
+            message:
+              error instanceof Error ? error.message : "No se pudo generar el Mundial clásico",
+          });
+        }
+      }
       if (tournamentTeams.length < 2) {
         return res.status(400).json({
           message: "Se necesitan al menos dos equipos inscritos para generar partidos",
@@ -1988,6 +2112,8 @@ export async function registerRoutes(
       const tournamentTeams = await storage.getTournamentTeams(input.tournamentId);
       const participantIds = new Set(tournamentTeams.map((team) => team.id));
       if (
+        !input.homeTeamId ||
+        !input.awayTeamId ||
         !participantIds.has(input.homeTeamId) ||
         !participantIds.has(input.awayTeamId)
       ) {
@@ -2137,7 +2263,38 @@ export async function registerRoutes(
         matchUpdate.streamChannel = requestedChannel;
         matchUpdate.streamUrl = buildTwitchUrl(requestedChannel);
       }
-      const match = await storage.updateMatch(matchId, matchUpdate);
+      if (existingTournament?.tournamentFormat === "classic_world_cup") {
+        const isResultChanging =
+          matchUpdate.status === "finished" ||
+          matchUpdate.homeScore !== undefined ||
+          matchUpdate.awayScore !== undefined ||
+          matchUpdate.regulationHomeScore !== undefined ||
+          matchUpdate.regulationAwayScore !== undefined ||
+          matchUpdate.extraTimeHomeScore !== undefined ||
+          matchUpdate.extraTimeAwayScore !== undefined ||
+          matchUpdate.penaltyHomeScore !== undefined ||
+          matchUpdate.penaltyAwayScore !== undefined ||
+          matchUpdate.winnerTeamId !== undefined ||
+          matchUpdate.victoryMethod !== undefined;
+        if (
+          isResultChanging &&
+          existingMatch.status === "finished" &&
+          (await hasDownstreamFinishedMatch(existingMatch))
+        ) {
+          return res.status(409).json({
+            message:
+              "No se puede modificar este resultado porque ya existe una fase posterior finalizada. Invalida o reconstruye la fase posterior antes de cambiarlo.",
+          });
+        }
+        ensureClassicWorldCupMatchCanFinish(existingMatch, matchUpdate as any);
+      }
+      let match = await storage.updateMatch(matchId, matchUpdate);
+      if (
+        existingTournament?.tournamentFormat === "classic_world_cup" &&
+        match.status === "finished"
+      ) {
+        match = await advanceClassicWorldCupMatch(match);
+      }
       if (matchUpdate.date || matchUpdate.status === "scheduled") {
         void scheduleMatchReminder(match);
       }

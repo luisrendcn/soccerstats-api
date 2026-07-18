@@ -35,6 +35,7 @@ export function calculateStandings(
   }
 
   for (const match of finishedMatches) {
+    if (!match.homeTeamId || !match.awayTeamId) continue;
     const home = table[match.homeTeamId];
     const away = table[match.awayTeamId];
     if (!home || !away) continue;

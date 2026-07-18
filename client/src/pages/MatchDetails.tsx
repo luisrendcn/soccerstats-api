@@ -200,7 +200,11 @@ export default function MatchDetails() {
   const [goalMinute, setGoalMinute] = useState("");
   const [isGoalDialogOpen, setIsGoalDialogOpen] = useState(false);
   const [isLiveDialogOpen, setIsLiveDialogOpen] = useState(false);
+  const [isKnockoutResultDialogOpen, setIsKnockoutResultDialogOpen] = useState(false);
   const [selectedLiveChannel, setSelectedLiveChannel] = useState("");
+  const [penaltyHomeScore, setPenaltyHomeScore] = useState("");
+  const [penaltyAwayScore, setPenaltyAwayScore] = useState("");
+  const [manualWinnerTeamId, setManualWinnerTeamId] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [isHighlightDialogOpen, setIsHighlightDialogOpen] = useState(false);
   const [editingHighlight, setEditingHighlight] =
@@ -231,6 +235,10 @@ export default function MatchDetails() {
   const isLoading = matchLoading || goalsLoading || !match || !homeTeam || !awayTeam;
   const isFinished = match?.status === "finished";
   const isLive = match?.status === "live";
+  const isClassicWorldCupKnockout =
+    tournament?.tournamentFormat === "classic_world_cup" &&
+    match?.tournamentPhase &&
+    match.tournamentPhase !== "group_stage";
   const currentTwitchChannel = match ? getTwitchChannelFromMatch(match) : null;
   const hasTwitchStream = Boolean(currentTwitchChannel);
   const currentOptimisticScore =
@@ -341,11 +349,74 @@ export default function MatchDetails() {
 
   const handleFinishMatch = async () => {
     if (!match) return;
+    if (
+      isClassicWorldCupKnockout &&
+      displayedHomeScore === displayedAwayScore
+    ) {
+      setPenaltyHomeScore("");
+      setPenaltyAwayScore("");
+      setManualWinnerTeamId("");
+      setIsKnockoutResultDialogOpen(true);
+      return;
+    }
     try {
-      await updateMatch.mutateAsync({ id: match.id, status: "finished" });
+      await updateMatch.mutateAsync({
+        id: match.id,
+        status: "finished",
+        homeScore: displayedHomeScore,
+        awayScore: displayedAwayScore,
+      });
       toast({ title: t("matchFinished"), description: t("finalScoreRecorded") });
     } catch (err) {
       toast({ variant: "destructive", title: t("error"), description: t("failedToFinishMatch") });
+    }
+  };
+
+  const handleFinishKnockoutWithTieBreak = async () => {
+    if (!match) return;
+    const homePenalties = Number(penaltyHomeScore);
+    const awayPenalties = Number(penaltyAwayScore);
+    const hasPenalties =
+      Number.isInteger(homePenalties) &&
+      Number.isInteger(awayPenalties) &&
+      homePenalties >= 0 &&
+      awayPenalties >= 0 &&
+      homePenalties !== awayPenalties;
+    try {
+      if (hasPenalties) {
+        await updateMatch.mutateAsync({
+          id: match.id,
+          status: "finished",
+          homeScore: displayedHomeScore,
+          awayScore: displayedAwayScore,
+          penaltyHomeScore: homePenalties,
+          penaltyAwayScore: awayPenalties,
+        });
+      } else if (manualWinnerTeamId) {
+        await updateMatch.mutateAsync({
+          id: match.id,
+          status: "finished",
+          homeScore: displayedHomeScore,
+          awayScore: displayedAwayScore,
+          winnerTeamId: Number(manualWinnerTeamId),
+          victoryMethod: "manual_decision",
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: t("error"),
+          description: t("knockoutTieBreakRequired"),
+        });
+        return;
+      }
+      setIsKnockoutResultDialogOpen(false);
+      toast({ title: t("matchFinished"), description: t("finalScoreRecorded") });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: t("error"),
+        description: err instanceof Error ? err.message : t("failedToFinishMatch"),
+      });
     }
   };
 
@@ -762,6 +833,67 @@ export default function MatchDetails() {
               disabled={updateMatch.isPending || !selectedLiveChannel}
             >
               {updateMatch.isPending ? t("loading") : t("markLive")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isKnockoutResultDialogOpen}
+        onOpenChange={setIsKnockoutResultDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("knockoutTieBreak")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {t("knockoutTieBreakDescription")}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>{homeTeam.name}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={penaltyHomeScore}
+                  onChange={(event) => setPenaltyHomeScore(event.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{awayTeam.name}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={penaltyAwayScore}
+                  onChange={(event) => setPenaltyAwayScore(event.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("manualWinner")}</Label>
+              <Select
+                value={manualWinnerTeamId}
+                onValueChange={setManualWinnerTeamId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("selectTeam")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={String(homeTeam.id)}>{homeTeam.name}</SelectItem>
+                  <SelectItem value={String(awayTeam.id)}>{awayTeam.name}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={handleFinishKnockoutWithTieBreak}
+              disabled={updateMatch.isPending}
+            >
+              {t("finishMatch")}
             </Button>
           </div>
         </DialogContent>
