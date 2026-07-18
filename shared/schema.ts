@@ -78,10 +78,16 @@ export const users = pgTable("users", {
 
 export const registrationRequests = pgTable("registration_requests", {
   id: serial("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  password: text("password").notNull(),
+  email: text("email").unique(),
+  password: text("password"),
   name: text("name").notNull(),
   requestedRole: text("requested_role").notNull().default("team_captain"),
+  requestKind: text("request_kind").notNull().default("account"),
+  teamType: text("team_type"),
+  tournamentId: integer("tournament_id"),
+  teamName: text("team_name"),
+  twitchChannel: text("twitch_channel"),
+  playersJson: text("players_json"),
   status: text("status").notNull().default("pending"),
   requestedAt: timestamp("requested_at").defaultNow(),
   reviewedAt: timestamp("reviewed_at"),
@@ -256,15 +262,95 @@ export const loginSchema = z.object({
   password: z.string().min(6, "Contraseña debe tener al menos 6 caracteres"),
 });
 
-export const registerSchema = insertUserSchema.omit({ role: true, teamId: true, isActive: true }).extend({
-  confirmPassword: z.string(),
-  requestedRole: z.enum(["tournament_manager", "team_captain", "referee"], {
-    message: "Selecciona un rol válido",
-  }),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Las contraseñas no coinciden",
-  path: ["confirmPassword"],
-});
+export const registerSchema = z
+  .object({
+    requestKind: z.enum(["account", "team"]).default("account"),
+    requestedRole: z
+      .enum(["tournament_manager", "team_captain", "referee"], {
+        message: "Selecciona un rol válido",
+      })
+      .default("team_captain"),
+    teamType: z.enum(["soccer", "videogame"]).optional(),
+    tournamentId: z.number().int().positive().optional(),
+    teamName: z.string().trim().min(2, "El nombre del equipo es requerido").max(100).optional(),
+    twitchChannel: z
+      .string()
+      .trim()
+      .regex(/^[a-zA-Z0-9_]{3,25}$/, "El canal de Twitch no es válido")
+      .optional(),
+    players: z
+      .array(
+        z.object({
+          name: z.string().trim().min(1).max(100),
+          number: z.number().int().min(0).max(999).optional().nullable(),
+        }),
+      )
+      .max(80, "Puedes inscribir máximo 80 jugadores")
+      .optional(),
+    email: z.string().email("Email inválido").optional(),
+    name: z.string().trim().min(2, "El nombre es requerido").max(100),
+    password: z.string().min(6, "Contraseña debe tener al menos 6 caracteres").optional(),
+    confirmPassword: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const requiresAccount =
+      data.requestKind === "account" || data.teamType === "soccer";
+
+    if (requiresAccount && !data.email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El correo es requerido",
+        path: ["email"],
+      });
+    }
+
+    if (requiresAccount && !data.password) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "La contraseña es requerida",
+        path: ["password"],
+      });
+    }
+
+    if (requiresAccount && data.password !== data.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Las contraseñas no coinciden",
+        path: ["confirmPassword"],
+      });
+    }
+
+    if (data.requestKind === "team") {
+      if (!data.teamType) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Selecciona el tipo de equipo",
+          path: ["teamType"],
+        });
+      }
+      if (!data.tournamentId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Selecciona el torneo",
+          path: ["tournamentId"],
+        });
+      }
+      if (!data.teamName) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "El nombre del equipo es requerido",
+          path: ["teamName"],
+        });
+      }
+      if (data.teamType === "videogame" && !data.twitchChannel) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "El canal de Twitch es requerido",
+          path: ["twitchChannel"],
+        });
+      }
+    }
+  });
 
 export const createTournamentSchema = z.object({
   name: z.string().min(2, "El nombre es requerido").max(100),

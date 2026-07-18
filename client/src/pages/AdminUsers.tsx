@@ -12,6 +12,8 @@ import {
   useUsers,
 } from "@/hooks/use-admin";
 import { useTeams } from "@/hooks/use-teams";
+import { useAuth } from "@/hooks/use-auth";
+import { useTournaments } from "@/hooks/use-tournaments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/PasswordInput";
@@ -56,8 +58,11 @@ const isTeamCaptainRole = (roleValue: string) =>
 export default function AdminUsers() {
   const { toast } = useToast();
   const { t } = useLanguage();
-  const { data: users, isLoading } = useUsers();
+  const { data: auth } = useAuth();
+  const isAdmin = auth?.userRole === "admin";
+  const { data: users, isLoading } = useUsers(isAdmin);
   const { data: teams } = useTeams(1, 1000);
+  const { data: tournaments = [] } = useTournaments();
   const { data: registrationRequests, isLoading: requestsLoading } =
     useRegistrationRequests();
   const createUser = useCreateUser();
@@ -260,7 +265,7 @@ export default function AdminUsers() {
     }
   };
 
-  if (isLoading || requestsLoading) {
+  if ((isAdmin && isLoading) || requestsLoading) {
     return (
       <Layout title={t("userManagement")}>
         <div className="flex justify-center items-center py-12">
@@ -281,6 +286,27 @@ export default function AdminUsers() {
   const activeUsers = users?.filter((user) => user.isActive) || [];
   const blockedUsers = users?.filter((user) => !user.isActive) || [];
   const canLockOrDeleteUser = (roleValue: string) => roleValue !== "admin";
+  const tournamentById = new Map(tournaments.map((tournament) => [tournament.id, tournament]));
+  const registrationRequestLabel = (request: {
+    requestKind?: string | null;
+    requestedRole?: string | null;
+    teamType?: string | null;
+  }) => {
+    if (request.requestKind === "team") {
+      return request.teamType === "videogame"
+        ? t("videogameTeam")
+        : t("normalTeam");
+    }
+    return roleLabel(request.requestedRole || "team_captain");
+  };
+  const parsePlayers = (playersJson?: string | null) => {
+    if (!playersJson) return [];
+    try {
+      return JSON.parse(playersJson) as Array<{ name: string; number?: number | null }>;
+    } catch {
+      return [];
+    }
+  };
 
   return (
     <Layout title={t("userManagement")}>
@@ -302,14 +328,43 @@ export default function AdminUsers() {
                 key={request.id}
                 className="rounded-lg border border-amber-200 bg-background p-3"
               >
-                <p className="font-medium">{request.name}</p>
-                <p className="text-xs text-muted-foreground">{request.email}</p>
+                <p className="font-medium">{request.teamName || request.name}</p>
+                {request.email && (
+                  <p className="text-xs text-muted-foreground">{request.email}</p>
+                )}
                 <p className="mt-1 text-xs text-muted-foreground">
                   {t("requestedRole")}:{" "}
                   <span className="font-semibold">
-                    {roleLabel(request.requestedRole || "team_captain")}
+                    {registrationRequestLabel(request)}
                   </span>
                 </p>
+                {request.tournamentId && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("tournament")}:{" "}
+                    <span className="font-semibold">
+                      {tournamentById.get(request.tournamentId)?.name ||
+                        `#${request.tournamentId}`}
+                    </span>
+                  </p>
+                )}
+                {request.twitchChannel && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Twitch: @{request.twitchChannel}
+                  </p>
+                )}
+                {parsePlayers(request.playersJson).length > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("players")}:{" "}
+                    {parsePlayers(request.playersJson)
+                      .slice(0, 5)
+                      .map((player) =>
+                        player.number != null
+                          ? `${player.name} #${player.number}`
+                          : player.name,
+                      )
+                      .join(", ")}
+                  </p>
+                )}
                 <p className="mt-1 text-xs text-muted-foreground">
                   {t("requestedAccess")}:{" "}
                   {request.requestedAt
@@ -323,8 +378,8 @@ export default function AdminUsers() {
                     onClick={() =>
                       setReviewRequest({
                         id: request.id,
-                        name: request.name,
-                        requestedRole: request.requestedRole || "team_captain",
+                        name: request.teamName || request.name,
+                        requestedRole: registrationRequestLabel(request),
                         action: "approve",
                       })
                     }
@@ -339,8 +394,8 @@ export default function AdminUsers() {
                     onClick={() =>
                       setReviewRequest({
                         id: request.id,
-                        name: request.name,
-                        requestedRole: request.requestedRole || "team_captain",
+                        name: request.teamName || request.name,
+                        requestedRole: registrationRequestLabel(request),
                         action: "reject",
                       })
                     }
@@ -360,6 +415,8 @@ export default function AdminUsers() {
           </div>
         </section>
 
+        {isAdmin && (
+          <>
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">
@@ -675,6 +732,8 @@ export default function AdminUsers() {
             )}
           </div>
         </section>
+          </>
+        )}
 
         {/* Role Change Confirmation */}
         <AlertDialog open={roleChangeId !== null} onOpenChange={(open) => {
@@ -728,7 +787,7 @@ export default function AdminUsers() {
                 {reviewRequest?.action === "approve"
                   ? t("approveRequestDescription", {
                       name: reviewRequest.name,
-                      role: roleLabel(reviewRequest.requestedRole),
+                      role: reviewRequest.requestedRole,
                     })
                   : t("rejectRequestDescription", {
                       name: reviewRequest?.name || "",

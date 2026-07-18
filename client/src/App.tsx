@@ -48,7 +48,7 @@ function Router() {
       <Route path="/tournaments/new" component={() => <ProtectedRoute component={CreateTournament} requiredRole={tournamentManagers} />} />
       <Route path="/tournaments/:id/matches/new" component={({ params }) => <ProtectedRoute component={() => <CreateMatch tournamentId={Number(params.id)} />} requiredRole={tournamentManagers} />} />
       <Route path="/tournaments/:id" component={({ params }) => <ProtectedRoute component={() => <TournamentDetails tournamentId={Number(params.id)} />} allowPublic />} />
-      <Route path="/admin/users" component={() => <ProtectedRoute component={AdminUsers} requiredRole="admin" />} />
+      <Route path="/admin/users" component={() => <ProtectedRoute component={AdminUsers} requiredRole={tournamentManagers} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} allowPublic />} />
       <Route component={NotFound} />
     </Switch>

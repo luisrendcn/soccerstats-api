@@ -39,7 +39,7 @@ const adminPredicate: QueryKeyPredicate = (queryKey) =>
   usersPredicate(queryKey) ||
   queryKeyStartsWith(queryKey, ["admin", "registration-requests"]);
 
-export function useUsers() {
+export function useUsers(enabled = true) {
   return useQuery({
     queryKey: ["admin", "users"],
     queryFn: async () => {
@@ -47,6 +47,7 @@ export function useUsers() {
       if (!res.ok) throw new Error("Failed to fetch users");
       return res.json() as Promise<SafeUser[]>;
     },
+    enabled,
   });
 }
 

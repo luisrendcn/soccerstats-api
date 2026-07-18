@@ -98,14 +98,24 @@ export interface IStorage {
   getRegistrationRequestByEmail(email: string): Promise<RegistrationRequest | undefined>;
   getPendingRegistrationRequests(): Promise<RegistrationRequest[]>;
   createRegistrationRequest(request: {
-    email: string;
-    password: string;
+    email?: string | null;
+    password?: string | null;
     name: string;
     requestedRole: string;
+    requestKind?: string;
+    teamType?: string | null;
+    tournamentId?: number | null;
+    teamName?: string | null;
+    twitchChannel?: string | null;
+    playersJson?: string | null;
   }): Promise<RegistrationRequest>;
-  approveRegistrationRequest(id: number, adminId: number): Promise<User | undefined>;
+  approveRegistrationRequest(
+    id: number,
+    adminId: number,
+  ): Promise<(User | RegistrationRequest) | undefined>;
   rejectRegistrationRequest(id: number, adminId: number): Promise<RegistrationRequest | undefined>;
   deleteRegistrationRequestsByEmail(email: string): Promise<void>;
+  getRegistrationRequestById(id: number): Promise<RegistrationRequest | undefined>;
   createNotification(notification: InsertAppNotification): Promise<AppNotification>;
   createNotifications(notifications: InsertAppNotification[]): Promise<AppNotification[]>;
   getUserNotifications(
@@ -427,6 +437,14 @@ export class DatabaseStorage implements IStorage {
     return request;
   }
 
+  async getRegistrationRequestById(id: number): Promise<RegistrationRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(registrationRequests)
+      .where(eq(registrationRequests.id, id));
+    return request;
+  }
+
   async getPendingRegistrationRequests(): Promise<RegistrationRequest[]> {
     return db
       .select()
@@ -436,10 +454,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createRegistrationRequest(request: {
-    email: string;
-    password: string;
+    email?: string | null;
+    password?: string | null;
     name: string;
     requestedRole: string;
+    requestKind?: string;
+    teamType?: string | null;
+    tournamentId?: number | null;
+    teamName?: string | null;
+    twitchChannel?: string | null;
+    playersJson?: string | null;
   }): Promise<RegistrationRequest> {
     const [created] = await db
       .insert(registrationRequests)
@@ -451,7 +475,7 @@ export class DatabaseStorage implements IStorage {
   async approveRegistrationRequest(
     id: number,
     adminId: number,
-  ): Promise<User | undefined> {
+  ): Promise<(User | RegistrationRequest) | undefined> {
     return db.transaction(async (tx) => {
       const [request] = await tx
         .select()
@@ -464,46 +488,98 @@ export class DatabaseStorage implements IStorage {
         );
       if (!request) return undefined;
 
-      const [existingUser] = await tx
-        .select()
-        .from(users)
-        .where(eq(users.email, request.email));
-      if (existingUser) {
-        await tx
-          .update(registrationRequests)
-          .set({
-            status: "rejected",
-            reviewedAt: new Date(),
-            reviewedBy: adminId,
+      const isTeamRequest = request.requestKind === "team";
+      const isVideogameTeam = isTeamRequest && request.teamType === "videogame";
+      let createdTeamId: number | null = null;
+
+      if (isTeamRequest) {
+        if (!request.tournamentId || !request.teamName) return undefined;
+
+        const [team] = await tx
+          .insert(teams)
+          .values({
+            name: request.teamName,
+            color: "#000000",
           })
-          .where(eq(registrationRequests.id, id));
-        return undefined;
+          .returning();
+        createdTeamId = team.id;
+
+        await tx.insert(tournamentTeams).values({
+          tournamentId: request.tournamentId,
+          teamId: team.id,
+          twitchChannel: isVideogameTeam ? request.twitchChannel : null,
+        });
+
+        if (!isVideogameTeam && request.playersJson) {
+          try {
+            const parsedPlayers = JSON.parse(request.playersJson) as Array<{
+              name?: string;
+              number?: number | null;
+            }>;
+            const playerRows = parsedPlayers
+              .filter((player) => player.name?.trim())
+              .map((player) => ({
+                teamId: team.id,
+                name: player.name!.trim(),
+                number:
+                  typeof player.number === "number" ? player.number : null,
+              }));
+            if (playerRows.length > 0) {
+              await tx.insert(players).values(playerRows);
+            }
+          } catch {
+            // Ignore malformed optional player metadata; the request itself can still be approved.
+          }
+        }
       }
 
-      const [user] = await tx
-        .insert(users)
-        .values({
-          email: request.email,
-          password: request.password,
-          name: request.name,
-          role:
-            request.requestedRole === "team"
-              ? "team_captain"
-              : request.requestedRole || "team_captain",
-          isActive: true,
-        })
-        .returning();
+      let user: User | undefined;
+      if (!isVideogameTeam) {
+        if (!request.email || !request.password) return undefined;
 
-      await tx
+        const [existingUser] = await tx
+          .select()
+          .from(users)
+          .where(eq(users.email, request.email));
+        if (existingUser) {
+          await tx
+            .update(registrationRequests)
+            .set({
+              status: "rejected",
+              reviewedAt: new Date(),
+              reviewedBy: adminId,
+            })
+            .where(eq(registrationRequests.id, id));
+          return undefined;
+        }
+
+        [user] = await tx
+          .insert(users)
+          .values({
+            email: request.email,
+            password: request.password,
+            name: request.name,
+            role:
+              request.requestedRole === "team"
+                ? "team_captain"
+                : request.requestedRole || "team_captain",
+            teamId: createdTeamId,
+            isActive: true,
+          })
+          .returning();
+      }
+
+      const [updatedRequest] = await tx
         .update(registrationRequests)
         .set({
           status: "approved",
           reviewedAt: new Date(),
           reviewedBy: adminId,
         })
-        .where(eq(registrationRequests.id, id));
+        .where(eq(registrationRequests.id, id))
+        .returning();
 
-      return user;
+      return user || updatedRequest;
     });
   }
 

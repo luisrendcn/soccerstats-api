@@ -221,10 +221,16 @@ app.use((req, res, next) => {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS registration_requests (
         id serial PRIMARY KEY,
-        email text NOT NULL UNIQUE,
-        password text NOT NULL,
+        email text UNIQUE,
+        password text,
         name text NOT NULL,
         requested_role text NOT NULL DEFAULT 'team_captain',
+        request_kind text NOT NULL DEFAULT 'account',
+        team_type text,
+        tournament_id integer,
+        team_name text,
+        twitch_channel text,
+        players_json text,
         status text NOT NULL DEFAULT 'pending',
         requested_at timestamp DEFAULT now(),
         reviewed_at timestamp,
@@ -239,6 +245,14 @@ app.use((req, res, next) => {
       ALTER TABLE registration_requests
       ALTER COLUMN requested_role SET DEFAULT 'team_captain'
     `);
+    await db.execute(sql`ALTER TABLE registration_requests ALTER COLUMN email DROP NOT NULL`);
+    await db.execute(sql`ALTER TABLE registration_requests ALTER COLUMN password DROP NOT NULL`);
+    await db.execute(sql`ALTER TABLE registration_requests ADD COLUMN IF NOT EXISTS request_kind text NOT NULL DEFAULT 'account'`);
+    await db.execute(sql`ALTER TABLE registration_requests ADD COLUMN IF NOT EXISTS team_type text`);
+    await db.execute(sql`ALTER TABLE registration_requests ADD COLUMN IF NOT EXISTS tournament_id integer`);
+    await db.execute(sql`ALTER TABLE registration_requests ADD COLUMN IF NOT EXISTS team_name text`);
+    await db.execute(sql`ALTER TABLE registration_requests ADD COLUMN IF NOT EXISTS twitch_channel text`);
+    await db.execute(sql`ALTER TABLE registration_requests ADD COLUMN IF NOT EXISTS players_json text`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS notifications (
         id serial PRIMARY KEY,

@@ -368,6 +368,19 @@ function roleLabel(role: string) {
   return labels[role] || role;
 }
 
+function requestLabel(request: {
+  requestKind?: string | null;
+  requestedRole?: string | null;
+  teamType?: string | null;
+}) {
+  if (request.requestKind === "team") {
+    return request.teamType === "videogame"
+      ? "equipo de videojuego"
+      : "equipo normal";
+  }
+  return roleLabel(request.requestedRole || "team_captain");
+}
+
 async function activeNotificationUsers() {
   const users = await storage.getAllUsers();
   return users.filter((user) => user.isActive !== false);
@@ -394,6 +407,21 @@ async function notifyAdmins(notification: Omit<InsertAppNotification, "userId">)
     users.filter((user) => normalizeStoredUserRole(user.role) === "admin").map((user) => user.id),
     notification,
   );
+}
+
+async function notifyAccessRequestReviewers(
+  tournament: Tournament | null,
+  notification: Omit<InsertAppNotification, "userId">,
+) {
+  const users = await activeNotificationUsers();
+  const reviewerIds = users
+    .filter((user) => {
+      const role = normalizeStoredUserRole(user.role);
+      if (role === "admin") return true;
+      return role === "tournament_manager" && tournament?.createdBy === user.id;
+    })
+    .map((user) => user.id);
+  return notifyUsers(reviewerIds, notification);
 }
 
 async function matchNotificationRecipients(match: Match, tournament?: Tournament | null) {
@@ -466,47 +494,93 @@ export async function registerRoutes(
   app.post("/api/auth/register", async (req, res) => {
     try {
       const input = registerSchema.parse(req.body);
-      const email = input.email.trim().toLowerCase();
-      
-      const existingUser = await storage.getUserByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({ message: "Email ya está registrado" });
+      const email = input.email?.trim().toLowerCase() || null;
+      const isTeamRequest = input.requestKind === "team";
+      const isVideogameTeam = isTeamRequest && input.teamType === "videogame";
+      let tournament: Tournament | null = null;
+
+      if (email) {
+        const existingUser = await storage.getUserByEmail(email);
+        if (existingUser) {
+          return res.status(400).json({ message: "Email ya está registrado" });
+        }
+
+        const existingRequest = await storage.getRegistrationRequestByEmail(email);
+        if (existingRequest?.status === "pending") {
+          return res.status(409).json({
+            message: "Ya existe una solicitud pendiente para este correo",
+          });
+        }
+        if (existingRequest?.status === "rejected") {
+          return res.status(403).json({
+            message: "Esta solicitud fue rechazada. Contacta al administrador.",
+          });
+        }
+        if (existingRequest) {
+          return res.status(400).json({ message: "Email ya está registrado" });
+        }
       }
 
-      const existingRequest = await storage.getRegistrationRequestByEmail(email);
-      if (existingRequest?.status === "pending") {
-        return res.status(409).json({
-          message: "Ya existe una solicitud pendiente para este correo",
-        });
-      }
-      if (existingRequest?.status === "rejected") {
-        return res.status(403).json({
-          message: "Esta solicitud fue rechazada. Contacta al administrador.",
-        });
-      }
-      if (existingRequest) {
-        return res.status(400).json({ message: "Email ya está registrado" });
+      if (isTeamRequest) {
+        tournament = (await storage.getTournamentById(input.tournamentId!)) || null;
+        if (!tournament) {
+          return res.status(404).json({ message: "Torneo no encontrado" });
+        }
+        if (tournament.tournamentType !== input.teamType) {
+          return res.status(400).json({
+            message:
+              input.teamType === "videogame"
+                ? "Selecciona un torneo de videojuego para este equipo"
+                : "Selecciona un torneo normal para este equipo",
+          });
+        }
+
+        const pendingTeamRequest = (await storage.getPendingRegistrationRequests()).find(
+          (request) =>
+            request.requestKind === "team" &&
+            request.tournamentId === input.tournamentId &&
+            normalizeName(request.teamName || request.name) ===
+              normalizeName(input.teamName || input.name),
+        );
+        if (pendingTeamRequest) {
+          return res.status(409).json({
+            message: "Ya existe una solicitud pendiente para este equipo en el torneo",
+          });
+        }
       }
 
-      await storage.createRegistrationRequest({
+      const request = await storage.createRegistrationRequest({
         email,
         name: input.name.trim(),
-        password: hashPassword(input.password),
-        requestedRole: input.requestedRole,
+        password: input.password ? hashPassword(input.password) : null,
+        requestedRole: isTeamRequest ? "team_captain" : input.requestedRole,
+        requestKind: input.requestKind,
+        teamType: input.teamType || null,
+        tournamentId: input.tournamentId || null,
+        teamName: input.teamName?.trim() || null,
+        twitchChannel: input.twitchChannel?.trim() || null,
+        playersJson: input.players?.length ? JSON.stringify(input.players) : null,
       });
-      void notifyAdmins({
+      void notifyAccessRequestReviewers(tournament, {
         title: "Nueva solicitud de acceso",
-        body: `${input.name.trim()} solicitó acceso como ${roleLabel(input.requestedRole)}.`,
+        body: `${
+          input.teamName?.trim() || input.name.trim()
+        } solicitó inscripción como ${requestLabel(request)}${
+          tournament?.name ? ` en ${tournament.name}` : ""
+        }.`,
         type: "access_request",
         link: "/admin/users",
         entityType: "registration_request",
+        entityId: request.id,
         scheduledAt: new Date(),
       });
 
       res.status(202).json({
         status: "pending",
         message:
-          "Solicitud enviada. Un administrador debe aprobar el rol solicitado antes de que puedas ingresar.",
+          isVideogameTeam
+            ? "Solicitud enviada. El administrador o gestor del torneo debe aprobar la inscripción."
+            : "Solicitud enviada. El administrador o gestor correspondiente debe aprobarla antes de que puedas ingresar.",
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -663,6 +737,26 @@ export async function registerRoutes(
     }).catch(next);
   };
 
+  const requireRegistrationReviewer = (req: Request, res: Response, next: NextFunction) => {
+    requireActiveSession(req, res, () => {
+      if (!["admin", "tournament_manager"].includes((req.session as any).userRole)) {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+      next();
+    }).catch(next);
+  };
+
+  const canReviewRegistrationRequest = async (
+    req: Request,
+    request: { tournamentId?: number | null },
+  ) => {
+    if ((req.session as any).userRole === "admin") return true;
+    if ((req.session as any).userRole !== "tournament_manager") return false;
+    if (!request.tournamentId) return false;
+    const tournament = await storage.getTournamentById(request.tournamentId);
+    return tournament?.createdBy === (req.session as any).userId;
+  };
+
   // Middleware para verificar permisos basado en recurso y acción
   const hasPublicPermission = (resource: string, action: string) => {
     const permissions = (ROLE_PERMISSIONS.public as Record<string, string[]>)[resource];
@@ -700,53 +794,84 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/registration-requests", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/registration-requests", requireRegistrationReviewer, async (req, res) => {
     const requests = await storage.getPendingRegistrationRequests();
-    const safeRequests = requests.map(({ password, ...request }) => request);
+    const visibleRequests = [];
+    for (const request of requests) {
+      if (await canReviewRegistrationRequest(req, request)) {
+        visibleRequests.push(request);
+      }
+    }
+    const safeRequests = visibleRequests.map(({ password, ...request }) => request);
     res.json(safeRequests);
   });
 
   app.post(
     "/api/admin/registration-requests/:id/approve",
-    requireAdmin,
+    requireRegistrationReviewer,
     async (req, res) => {
       const requestId = Number(req.params.id);
       if (!Number.isInteger(requestId) || requestId <= 0) {
         return res.status(400).json({ message: "Solicitud inválida" });
       }
 
-      const user = await storage.approveRegistrationRequest(
+      const request = await storage.getRegistrationRequestById(requestId);
+      if (!request || request.status !== "pending") {
+        return res.status(404).json({
+          message: "Solicitud no encontrada o ya procesada",
+        });
+      }
+      if (!(await canReviewRegistrationRequest(req, request))) {
+        return res.status(403).json({ message: "No puedes revisar esta solicitud" });
+      }
+
+      const result = await storage.approveRegistrationRequest(
         requestId,
         (req.session as any).userId,
       );
-      if (!user) {
+      if (!result) {
         return res.status(404).json({
           message: "Solicitud no encontrada, ya procesada o correo registrado",
         });
       }
 
-      const { password, ...safeUser } = user;
-      void storage.createNotification({
-        userId: user.id,
-        title: "Acceso aprobado",
-        body: `Tu cuenta fue aprobada como ${roleLabel(user.role)}. Ya puedes usar la app.`,
-        type: "access_approved",
-        link: "/",
-        entityType: "user",
-        entityId: user.id,
-        scheduledAt: new Date(),
-      });
-      res.status(201).json(safeUser);
+      if ("role" in result) {
+        const { password, ...safeUser } = result;
+        void storage.createNotification({
+          userId: result.id,
+          title: "Acceso aprobado",
+          body: `Tu cuenta fue aprobada como ${roleLabel(result.role)}. Ya puedes usar la app.`,
+          type: "access_approved",
+          link: "/",
+          entityType: "user",
+          entityId: result.id,
+          scheduledAt: new Date(),
+        });
+        return res.status(201).json(safeUser);
+      }
+
+      const { password, ...safeRequest } = result;
+      res.status(201).json(safeRequest);
     },
   );
 
   app.post(
     "/api/admin/registration-requests/:id/reject",
-    requireAdmin,
+    requireRegistrationReviewer,
     async (req, res) => {
       const requestId = Number(req.params.id);
       if (!Number.isInteger(requestId) || requestId <= 0) {
         return res.status(400).json({ message: "Solicitud inválida" });
+      }
+
+      const pendingRequest = await storage.getRegistrationRequestById(requestId);
+      if (!pendingRequest || pendingRequest.status !== "pending") {
+        return res.status(404).json({
+          message: "Solicitud no encontrada o ya procesada",
+        });
+      }
+      if (!(await canReviewRegistrationRequest(req, pendingRequest))) {
+        return res.status(403).json({ message: "No puedes revisar esta solicitud" });
       }
 
       const request = await storage.rejectRegistrationRequest(
