@@ -17,6 +17,7 @@ import {
 } from "@/lib/optimistic-cache";
 import {
   readPersistentCache,
+  updatePersistentCacheEntries,
   writePersistentCache,
 } from "@/lib/persistentCache";
 
@@ -118,6 +119,9 @@ export function useUpdateMatch() {
         if (Array.isArray(data)) {
           return patchArrayItemById(data, id, updates);
         }
+        if (queryKeyStartsWith(queryKey, ["bootstrap"])) {
+          return patchBootstrapMatch(data, id, updates);
+        }
         if (queryKeyStartsWith(queryKey, [api.matches.get.path, id])) {
           return data && typeof data === "object" ? { ...data, ...updates } : data;
         }
@@ -133,8 +137,16 @@ export function useUpdateMatch() {
       const predicate = matchUpdatePredicate(variables.id);
       queryClient.setQueryData([api.matches.get.path, variables.id], match);
       updateOptimisticQueries(queryClient, predicate, (data) =>
-        replaceArrayItemById(data, match),
+        Array.isArray(data)
+          ? replaceArrayItemById(data, match)
+          : patchBootstrapMatch(data, match.id, match),
       );
+      updatePersistentMatchCaches(match.id, match);
+      if (variables.status === "live" || variables.status === "finished") {
+        void queryClient.invalidateQueries({
+          predicate: (query) => queryKeyStartsWith(query.queryKey, ["twitch-stream"]),
+        });
+      }
     },
     onSettled: (_data, _error, _variables, context) => {
       if (context) {
@@ -147,7 +159,47 @@ export function useUpdateMatch() {
 function matchUpdatePredicate(matchId: number): QueryKeyPredicate {
   return (queryKey) =>
     queryKeyStartsWith(queryKey, [api.matches.list.path]) ||
-    queryKeyStartsWith(queryKey, [api.matches.get.path, matchId]);
+    queryKeyStartsWith(queryKey, [api.matches.get.path, matchId]) ||
+    queryKeyStartsWith(queryKey, ["bootstrap"]);
+}
+
+function patchBootstrapMatch(
+  data: unknown,
+  matchId: number,
+  patch: Record<string, unknown>,
+) {
+  if (
+    !data ||
+    typeof data !== "object" ||
+    !("matches" in data) ||
+    !Array.isArray((data as { matches?: unknown }).matches)
+  ) {
+    return data;
+  }
+
+  return {
+    ...data,
+    matches: patchArrayItemById(
+      (data as { matches: unknown[] }).matches,
+      matchId,
+      patch,
+    ),
+  };
+}
+
+function updatePersistentMatchCaches(
+  matchId: number,
+  patch: Record<string, unknown>,
+) {
+  updatePersistentCacheEntries(
+    (key) => key.startsWith("matches:") || key === "bootstrap:v1",
+    (data) => {
+      if (Array.isArray(data)) {
+        return patchArrayItemById(data, matchId, patch);
+      }
+      return patchBootstrapMatch(data, matchId, patch);
+    },
+  );
 }
 
 function matchDeletePredicate(matchId: number): QueryKeyPredicate {

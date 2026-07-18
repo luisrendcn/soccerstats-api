@@ -86,7 +86,7 @@ export function TwitchStreamCard({
   const { data: streamStatus } = useQuery({
     queryKey: getTwitchStreamQueryKey(channel),
     queryFn: () => fetchTwitchStreamStatus(channel!),
-    enabled: Boolean(channel),
+    enabled: Boolean(channel) && match.status === "live",
     staleTime: 15_000,
     refetchInterval: 15_000,
     retry: false,
