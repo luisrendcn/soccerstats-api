@@ -282,6 +282,22 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(res.body[0]).toHaveProperty('name', 'Team A');
   });
 
+  it('filters teams by name when search is provided', async () => {
+    vi.spyOn(storage, 'getTeams').mockResolvedValueOnce([
+      { id: 1, name: 'Tigres FC', color: '#000000' },
+      { id: 2, name: 'Leones', color: '#111111' },
+      { id: 3, name: 'Tigres eSports', color: '#222222' },
+    ] as any);
+
+    const res = await request(app).get('/api/teams?search=tigre');
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((team: any) => team.name)).toEqual([
+      'Tigres FC',
+      'Tigres eSports',
+    ]);
+  });
+
   it('returns players list for team', async () => {
     const res = await request(app).get('/api/teams/1/players');
     expect(res.status).toBe(200);

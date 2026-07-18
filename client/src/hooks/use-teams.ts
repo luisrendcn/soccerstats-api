@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertTeam, type InsertPlayer } from "@shared/routes";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
@@ -34,6 +34,7 @@ export function useTeams(page = 1, limit = 10, search = "") {
       writePersistentCache(cacheKey, teams);
       return teams;
     },
+    placeholderData: keepPreviousData,
     initialData: cached?.data,
     initialDataUpdatedAt: cached?.savedAt,
 

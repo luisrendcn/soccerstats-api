@@ -1111,9 +1111,16 @@ export async function registerRoutes(
      TEAMS
   ======================= */
 
-  app.get(api.teams.list.path, requirePermission("teams", "read"), async (_req, res) => {
+  app.get(api.teams.list.path, requirePermission("teams", "read"), async (req, res) => {
+    const search = typeof req.query.search === "string"
+      ? req.query.search.trim().toLowerCase()
+      : "";
     const teams = await storage.getTeams();
-    res.json(teams);
+    res.json(
+      search
+        ? teams.filter((team) => team.name.toLowerCase().includes(search))
+        : teams,
+    );
   });
 
   app.get(api.teams.get.path, requirePermission("teams", "read"), async (req, res) => {
