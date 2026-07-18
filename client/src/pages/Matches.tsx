@@ -50,8 +50,8 @@ export default function Matches() {
     queries: streamMatches.map((match) => {
       const channel = getTwitchChannelFromMatch(match)!;
       return {
-        queryKey: getTwitchStreamQueryKey(channel),
-        queryFn: () => fetchTwitchStreamStatus(channel),
+        queryKey: getTwitchStreamQueryKey(channel, match.id),
+        queryFn: () => fetchTwitchStreamStatus(channel, match.id),
         staleTime: 15_000,
         refetchInterval: 15_000,
         retry: false,

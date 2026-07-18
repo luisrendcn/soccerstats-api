@@ -123,7 +123,7 @@ async function getTwitchAppAccessToken() {
   return twitchTokenCache.token;
 }
 
-async function getTwitchStreamStatus(channel: string) {
+async function getTwitchStreamStatus(channel: string, stateKey = channel) {
   const clientId = process.env.TWITCH_CLIENT_ID;
   const token = await getTwitchAppAccessToken();
   if (!clientId || !token) {
@@ -134,6 +134,8 @@ async function getTwitchStreamStatus(channel: string) {
       stream: null,
       offlineSince: null,
       graceExpiresAt: null,
+      lastLiveAt: null,
+      hasBeenLive: false,
     };
   }
 
@@ -151,13 +153,13 @@ async function getTwitchStreamStatus(channel: string) {
   const payload = (await response.json()) as { data?: any[] };
   const stream = payload.data?.[0] ?? null;
   const now = Date.now();
-  const previous = twitchStreamState.get(channel) || {
+  const previous = twitchStreamState.get(stateKey) || {
     offlineSince: null,
     lastLiveAt: null,
   };
 
   if (stream) {
-    twitchStreamState.set(channel, { offlineSince: null, lastLiveAt: now });
+    twitchStreamState.set(stateKey, { offlineSince: null, lastLiveAt: now });
     return {
       configured: true,
       channel,
@@ -165,11 +167,13 @@ async function getTwitchStreamStatus(channel: string) {
       stream,
       offlineSince: null,
       graceExpiresAt: null,
+      lastLiveAt: new Date(now).toISOString(),
+      hasBeenLive: true,
     };
   }
 
   const offlineSince = previous.offlineSince ?? now;
-  twitchStreamState.set(channel, {
+  twitchStreamState.set(stateKey, {
     offlineSince,
     lastLiveAt: previous.lastLiveAt,
   });
@@ -181,6 +185,10 @@ async function getTwitchStreamStatus(channel: string) {
     stream: null,
     offlineSince: new Date(offlineSince).toISOString(),
     graceExpiresAt: new Date(offlineSince + TWITCH_STREAM_GRACE_MS).toISOString(),
+    lastLiveAt: previous.lastLiveAt
+      ? new Date(previous.lastLiveAt).toISOString()
+      : null,
+    hasBeenLive: previous.lastLiveAt !== null,
   };
 }
 
@@ -1898,7 +1906,12 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Canal de Twitch inválido" });
     }
 
-    const streamStatus = await getTwitchStreamStatus(channel);
+    const matchId = req.query.matchId;
+    const stateKey =
+      typeof matchId === "string" && /^\d+$/.test(matchId)
+        ? `${channel}:match:${matchId}`
+        : channel;
+    const streamStatus = await getTwitchStreamStatus(channel, stateKey);
     if (!streamStatus) {
       return res.status(502).json({ message: "No se pudo consultar Twitch" });
     }

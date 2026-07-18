@@ -19,6 +19,8 @@ export type TwitchStreamStatus = {
   stream: { title?: string; viewer_count?: number } | null;
   offlineSince?: string | null;
   graceExpiresAt?: string | null;
+  lastLiveAt?: string | null;
+  hasBeenLive?: boolean;
 };
 
 function normalizeTwitchChannel(value?: string | null) {
@@ -43,12 +45,13 @@ export function getTwitchChannelFromMatch(match: MatchWithStream) {
   return normalizeTwitchChannel(match.streamChannel || match.streamUrl);
 }
 
-export function getTwitchStreamQueryKey(channel: string | null) {
-  return ["twitch-stream", channel];
+export function getTwitchStreamQueryKey(channel: string | null, matchId?: number) {
+  return ["twitch-stream", channel, matchId ?? null];
 }
 
-export async function fetchTwitchStreamStatus(channel: string) {
-  const res = await apiFetch(`/api/twitch/streams/${channel}`);
+export async function fetchTwitchStreamStatus(channel: string, matchId?: number) {
+  const suffix = matchId ? `?matchId=${matchId}` : "";
+  const res = await apiFetch(`/api/twitch/streams/${channel}${suffix}`);
   if (!res.ok) throw new Error("Could not check Twitch");
   return res.json() as Promise<TwitchStreamStatus>;
 }
@@ -71,7 +74,12 @@ export function isTwitchStreamVisible(
   if (streamStatus.isLive === true) {
     return true;
   }
-  return false;
+
+  if (streamStatus.hasBeenLive === true) {
+    return false;
+  }
+
+  return true;
 }
 
 export function TwitchStreamCard({
@@ -84,8 +92,8 @@ export function TwitchStreamCard({
   const { t } = useLanguage();
   const channel = getTwitchChannelFromMatch(match);
   const { data: streamStatus } = useQuery({
-    queryKey: getTwitchStreamQueryKey(channel),
-    queryFn: () => fetchTwitchStreamStatus(channel!),
+    queryKey: getTwitchStreamQueryKey(channel, match.id),
+    queryFn: () => fetchTwitchStreamStatus(channel!, match.id),
     enabled: Boolean(channel) && match.status === "live",
     staleTime: 15_000,
     refetchInterval: 15_000,
@@ -101,7 +109,13 @@ export function TwitchStreamCard({
     streamStatus?.isLive === true ||
     (streamStatus?.configured !== true && match.status === "live");
   const isRecentlyOffline =
-    streamStatus?.configured === true && streamStatus.isLive === false;
+    streamStatus?.configured === true &&
+    streamStatus.isLive === false &&
+    streamStatus.hasBeenLive === true;
+  const isWaitingForTwitch =
+    streamStatus?.configured === true &&
+    streamStatus.isLive === false &&
+    streamStatus.hasBeenLive !== true;
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
@@ -139,6 +153,11 @@ export function TwitchStreamCard({
         {isRecentlyOffline && (
           <p className="text-sm text-muted-foreground">
             {t("streamOffline")}
+          </p>
+        )}
+        {isWaitingForTwitch && (
+          <p className="text-sm text-muted-foreground">
+            {t("streamWaitingLive")}
           </p>
         )}
         {streamStatus?.stream?.title && (
