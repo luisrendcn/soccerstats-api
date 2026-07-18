@@ -7,6 +7,7 @@ import {
   matchHighlights,
   users,
   registrationRequests,
+  notifications,
   tournaments,
   tournamentTeams,
   type InsertTeam,
@@ -22,11 +23,13 @@ import {
   type MatchHighlight,
   type User,
   type RegistrationRequest,
+  type AppNotification,
+  type InsertAppNotification,
   type Tournament,
   type InsertTournament,
   type TournamentTeam,
 } from "@shared/schema";
-import { eq, desc, isNull, and, or, inArray, ne } from "drizzle-orm";
+import { eq, desc, isNull, and, or, inArray, ne, lte } from "drizzle-orm";
 import { calculateStandings, type Standing } from "./standings";
 
 /* =======================
@@ -103,6 +106,19 @@ export interface IStorage {
   approveRegistrationRequest(id: number, adminId: number): Promise<User | undefined>;
   rejectRegistrationRequest(id: number, adminId: number): Promise<RegistrationRequest | undefined>;
   deleteRegistrationRequestsByEmail(email: string): Promise<void>;
+  createNotification(notification: InsertAppNotification): Promise<AppNotification>;
+  createNotifications(notifications: InsertAppNotification[]): Promise<AppNotification[]>;
+  getUserNotifications(
+    userId: number,
+    options?: { includeRead?: boolean; limit?: number },
+  ): Promise<AppNotification[]>;
+  markNotificationRead(id: number, userId: number): Promise<AppNotification | undefined>;
+  markAllNotificationsRead(userId: number): Promise<void>;
+  deleteNotificationsForEntity(
+    entityType: string,
+    entityId: number,
+    type?: string,
+  ): Promise<void>;
 
   // Tournaments
   getTournaments(): Promise<Tournament[]>;
@@ -511,6 +527,79 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(registrationRequests)
       .where(eq(registrationRequests.email, email));
+  }
+
+  async createNotification(
+    notification: InsertAppNotification,
+  ): Promise<AppNotification> {
+    const [created] = await db.insert(notifications).values(notification).returning();
+    return created;
+  }
+
+  async createNotifications(
+    notificationList: InsertAppNotification[],
+  ): Promise<AppNotification[]> {
+    if (notificationList.length === 0) return [];
+    return db.insert(notifications).values(notificationList).returning();
+  }
+
+  async getUserNotifications(
+    userId: number,
+    options: { includeRead?: boolean; limit?: number } = {},
+  ): Promise<AppNotification[]> {
+    const conditions = [
+      eq(notifications.userId, userId),
+      lte(notifications.scheduledAt, new Date()),
+    ];
+    if (!options.includeRead) {
+      conditions.push(isNull(notifications.readAt));
+    }
+
+    return db
+      .select()
+      .from(notifications)
+      .where(and(...conditions))
+      .orderBy(desc(notifications.scheduledAt), desc(notifications.createdAt))
+      .limit(Math.min(Math.max(options.limit || 30, 1), 100));
+  }
+
+  async markNotificationRead(
+    id: number,
+    userId: number,
+  ): Promise<AppNotification | undefined> {
+    const [updated] = await db
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(and(eq(notifications.id, id), eq(notifications.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async markAllNotificationsRead(userId: number): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          isNull(notifications.readAt),
+          lte(notifications.scheduledAt, new Date()),
+        ),
+      );
+  }
+
+  async deleteNotificationsForEntity(
+    entityType: string,
+    entityId: number,
+    type?: string,
+  ): Promise<void> {
+    const conditions = [
+      eq(notifications.entityType, entityType),
+      eq(notifications.entityId, entityId),
+      isNull(notifications.readAt),
+    ];
+    if (type) conditions.push(eq(notifications.type, type));
+    await db.delete(notifications).where(and(...conditions));
   }
 
   /* =======================

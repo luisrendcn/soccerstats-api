@@ -18,6 +18,9 @@ import {
   updateTournamentSchema,
   createMatchHighlightSchema,
   updateMatchHighlightSchema,
+  type InsertAppNotification,
+  type Match,
+  type Tournament,
 } from "@shared/schema";
 import { z } from "zod/v4";
 import { normalizeTeamColor, supportedTeamColorNames } from "@shared/team-colors";
@@ -310,6 +313,104 @@ async function destroySession(req: Request, res: Response) {
   res.clearCookie("soccer.sid");
 }
 
+function roleLabel(role: string) {
+  const labels: Record<string, string> = {
+    admin: "administrador",
+    tournament_manager: "gestor de torneos",
+    team_captain: "capitán/líder de equipo",
+    team: "capitán/líder de equipo",
+    referee: "árbitro",
+    public: "público",
+  };
+  return labels[role] || role;
+}
+
+async function activeNotificationUsers() {
+  const users = await storage.getAllUsers();
+  return users.filter((user) => user.isActive !== false);
+}
+
+async function notifyUsers(
+  userIds: number[],
+  notification: Omit<InsertAppNotification, "userId">,
+) {
+  const uniqueUserIds = [...new Set(userIds)].filter((id) => Number.isInteger(id));
+  if (uniqueUserIds.length === 0) return [];
+  return storage.createNotifications(
+    uniqueUserIds.map((userId) => ({
+      ...notification,
+      userId,
+      scheduledAt: notification.scheduledAt || new Date(),
+    })),
+  );
+}
+
+async function notifyAdmins(notification: Omit<InsertAppNotification, "userId">) {
+  const users = await activeNotificationUsers();
+  return notifyUsers(
+    users.filter((user) => normalizeStoredUserRole(user.role) === "admin").map((user) => user.id),
+    notification,
+  );
+}
+
+async function matchNotificationRecipients(match: Match, tournament?: Tournament | null) {
+  const users = await activeNotificationUsers();
+  const teamIds = new Set([match.homeTeamId, match.awayTeamId]);
+  return users
+    .filter((user) => {
+      const role = normalizeStoredUserRole(user.role);
+      if (role === "admin" || role === "referee") return true;
+      if (role === "tournament_manager" && tournament?.createdBy === user.id) return true;
+      if (isTeamCaptainRole(role) && user.teamId && teamIds.has(user.teamId)) return true;
+      return false;
+    })
+    .map((user) => user.id);
+}
+
+async function matchNotificationText(match: Match) {
+  const [homeTeam, awayTeam, tournament] = await Promise.all([
+    storage.getTeam(match.homeTeamId),
+    storage.getTeam(match.awayTeamId),
+    match.tournamentId ? storage.getTournamentById(match.tournamentId) : Promise.resolve(null),
+  ]);
+  const matchup = `${homeTeam?.name || "Equipo local"} vs ${awayTeam?.name || "Equipo visitante"}`;
+  return { matchup, tournament };
+}
+
+async function scheduleMatchReminder(match: Match) {
+  if (match.status === "finished") return;
+  const { matchup, tournament } = await matchNotificationText(match);
+  const userIds = await matchNotificationRecipients(match, tournament);
+  await storage.deleteNotificationsForEntity("match", match.id, "match_reminder");
+  await notifyUsers(userIds, {
+    title: "Recordatorio de partido",
+    body: `${matchup} está programado para este momento${tournament?.name ? ` en ${tournament.name}` : ""}.`,
+    type: "match_reminder",
+    link: `/matches/${match.id}`,
+    entityType: "match",
+    entityId: match.id,
+    scheduledAt: new Date(match.date),
+  });
+}
+
+async function notifyMatchStatus(match: Match, status: string) {
+  const { matchup, tournament } = await matchNotificationText(match);
+  const userIds = await matchNotificationRecipients(match, tournament);
+  const isLive = status === "live";
+  await storage.deleteNotificationsForEntity("match", match.id, "match_reminder");
+  await notifyUsers(userIds, {
+    title: isLive ? "Partido en vivo" : "Partido finalizado",
+    body: isLive
+      ? `${matchup} está en vivo.`
+      : `${matchup} finalizó ${match.homeScore ?? 0}:${match.awayScore ?? 0}.`,
+    type: isLive ? "match_live" : "match_finished",
+    link: `/matches/${match.id}`,
+    entityType: "match",
+    entityId: match.id,
+    scheduledAt: new Date(),
+  });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -349,6 +450,14 @@ export async function registerRoutes(
         name: input.name.trim(),
         password: hashPassword(input.password),
         requestedRole: input.requestedRole,
+      });
+      void notifyAdmins({
+        title: "Nueva solicitud de acceso",
+        body: `${input.name.trim()} solicitó acceso como ${roleLabel(input.requestedRole)}.`,
+        type: "access_request",
+        link: "/admin/users",
+        entityType: "registration_request",
+        scheduledAt: new Date(),
       });
 
       res.status(202).json({
@@ -449,6 +558,36 @@ export async function registerRoutes(
     });
   });
 
+  app.get("/api/notifications", requireActiveSession, async (req, res) => {
+    const includeRead = req.query.includeRead === "true";
+    const limit = Number(req.query.limit || 30);
+    const notifications = await storage.getUserNotifications(
+      (req.session as any).userId,
+      { includeRead, limit },
+    );
+    res.json(notifications);
+  });
+
+  app.post("/api/notifications/:id/read", requireActiveSession, async (req, res) => {
+    const notificationId = Number(req.params.id);
+    if (!Number.isInteger(notificationId) || notificationId <= 0) {
+      return res.status(400).json({ message: "Notificación inválida" });
+    }
+    const notification = await storage.markNotificationRead(
+      notificationId,
+      (req.session as any).userId,
+    );
+    if (!notification) {
+      return res.status(404).json({ message: "Notificación no encontrada" });
+    }
+    res.json(notification);
+  });
+
+  app.post("/api/notifications/read-all", requireActiveSession, async (req, res) => {
+    await storage.markAllNotificationsRead((req.session as any).userId);
+    res.json({ success: true });
+  });
+
   app.get("/api/bootstrap", async (_req, res) => {
     const [teams, matches, tournaments] = await Promise.all([
       storage.getTeams(),
@@ -542,6 +681,16 @@ export async function registerRoutes(
       }
 
       const { password, ...safeUser } = user;
+      void storage.createNotification({
+        userId: user.id,
+        title: "Acceso aprobado",
+        body: `Tu cuenta fue aprobada como ${roleLabel(user.role)}. Ya puedes usar la app.`,
+        type: "access_approved",
+        link: "/",
+        entityType: "user",
+        entityId: user.id,
+        scheduledAt: new Date(),
+      });
       res.status(201).json(safeUser);
     },
   );
@@ -616,6 +765,16 @@ export async function registerRoutes(
       });
 
       const { password: _, ...safeUser } = user;
+      void storage.createNotification({
+        userId: user.id,
+        title: "Cuenta creada",
+        body: `Tu cuenta fue creada como ${roleLabel(user.role)}.`,
+        type: "user_created",
+        link: "/",
+        entityType: "user",
+        entityId: user.id,
+        scheduledAt: new Date(),
+      });
       res.status(201).json(safeUser);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -1188,7 +1347,9 @@ export async function registerRoutes(
                 ? buildTwitchUrl(homeTeam?.twitchChannel)
                 : null,
           };
-          createdMatches.push(await storage.createMatch(matchInput));
+          const createdMatch = await storage.createMatch(matchInput);
+          createdMatches.push(createdMatch);
+          void scheduleMatchReminder(createdMatch);
         }
       }
 
@@ -1450,6 +1611,7 @@ export async function registerRoutes(
       }
 
       const match = await storage.createMatch(matchInput);
+      void scheduleMatchReminder(match);
       res.status(201).json(match);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -1462,8 +1624,8 @@ export async function registerRoutes(
   // Soft delete endpoints
   app.delete('/api/teams/:id', requirePermission("teams", "delete"), async (req, res) => {
     const id = Number(req.params.id);
-    const updated = await storage.softDeleteTeam(id);
-    res.json(updated);
+    await storage.softDeleteTeam(id);
+    res.json({ success: true });
   });
 
   app.delete('/api/players/:id', requirePermission("players", "delete"), async (req, res) => {
@@ -1477,14 +1639,15 @@ export async function registerRoutes(
         return res.status(403).json({ message: "No puedes eliminar jugadores de otro equipo" });
       }
     }
-    const updated = await storage.softDeletePlayer(id);
-    res.json(updated);
+    await storage.softDeletePlayer(id);
+    res.json({ success: true });
   });
 
   app.delete('/api/matches/:id', requirePermission("matches", "delete"), async (req, res) => {
     const id = Number(req.params.id);
-    const updated = await storage.softDeleteMatch(id);
-    res.json(updated);
+    await storage.softDeleteMatch(id);
+    await storage.deleteNotificationsForEntity("match", id);
+    res.json({ success: true });
   });
 
   app.put(api.matches.update.path, requirePermission("matches", "update"), async (req, res) => {
@@ -1517,6 +1680,14 @@ export async function registerRoutes(
         if (!tournament) return;
       }
       const match = await storage.updateMatch(matchId, input);
+      if (input.date || input.status === "scheduled") {
+        void scheduleMatchReminder(match);
+      }
+      if (input.status && input.status !== existingMatch.status) {
+        if (input.status === "live" || input.status === "finished") {
+          void notifyMatchStatus(match, input.status);
+        }
+      }
       res.json(match);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -1716,6 +1887,28 @@ export async function registerRoutes(
           durationSeconds: input.durationSeconds || null,
           fileSizeBytes: input.fileSizeBytes || null,
         });
+        const tournament = await storage.getTournamentById(match.tournamentId!);
+        const reviewers = await activeNotificationUsers();
+        void notifyUsers(
+          reviewers
+            .filter((user) => {
+              const role = normalizeStoredUserRole(user.role);
+              return (
+                role === "admin" ||
+                (role === "tournament_manager" && user.id === tournament?.createdBy)
+              );
+            })
+            .map((user) => user.id),
+          {
+            title: "Jugada pendiente",
+            body: `Hay una jugada nueva para revisar: ${input.title}.`,
+            type: "highlight_pending",
+            link: `/matches/${matchId}`,
+            entityType: "highlight",
+            entityId: highlight.id,
+            scheduledAt: new Date(),
+          },
+        );
         res.status(201).json(highlight);
       } catch (err) {
         if (err instanceof z.ZodError) {
@@ -1764,6 +1957,21 @@ export async function registerRoutes(
           fileSizeBytes:
             input.fileSizeBytes === undefined ? undefined : input.fileSizeBytes || null,
         });
+        if (updated?.status && input.status && input.status !== existing.status) {
+          void storage.createNotification({
+            userId: existing.uploadedBy,
+            title: input.status === "approved" ? "Jugada aprobada" : "Jugada rechazada",
+            body:
+              input.status === "approved"
+                ? `Tu jugada "${existing.title}" fue aprobada.`
+                : `Tu jugada "${existing.title}" fue rechazada.`,
+            type: input.status === "approved" ? "highlight_approved" : "highlight_rejected",
+            link: `/matches/${existing.matchId}`,
+            entityType: "highlight",
+            entityId: existing.id,
+            scheduledAt: new Date(),
+          });
+        }
         res.json(updated);
       } catch (err) {
         if (err instanceof z.ZodError) {

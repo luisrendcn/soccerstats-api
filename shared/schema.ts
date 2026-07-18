@@ -87,6 +87,20 @@ export const registrationRequests = pgTable("registration_requests", {
   reviewedBy: integer("reviewed_by"),
 });
 
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  type: text("type").notNull().default("system"),
+  link: text("link"),
+  entityType: text("entity_type"),
+  entityId: integer("entity_id"),
+  scheduledAt: timestamp("scheduled_at").notNull().defaultNow(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const tournaments = pgTable("tournaments", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -190,6 +204,13 @@ export const usersRelations = relations(users, ({ one }) => ({
   }),
 }));
 
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
 export const tournamentsRelations = relations(tournaments, ({ many }) => ({
   tournamentTeams: many(tournamentTeams),
 }));
@@ -220,6 +241,11 @@ export const insertRegistrationRequestSchema = createInsertSchema(registrationRe
   requestedAt: true,
   reviewedAt: true,
   reviewedBy: true,
+});
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  readAt: true,
+  createdAt: true,
 });
 export const insertTournamentSchema = createInsertSchema(tournaments).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 
@@ -342,6 +368,8 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type RegistrationRequest = typeof registrationRequests.$inferSelect;
 export type InsertRegistrationRequest = z.infer<typeof insertRegistrationRequestSchema>;
+export type AppNotification = typeof notifications.$inferSelect;
+export type InsertAppNotification = z.infer<typeof insertNotificationSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type UserRole = "admin" | "tournament_manager" | "team_captain" | "team" | "referee" | "public";

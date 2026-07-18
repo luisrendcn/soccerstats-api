@@ -5,9 +5,11 @@ import { useDarkMode } from "@/hooks/use-dark-mode";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Settings() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [dark, setDark] = useDarkMode();
 
   const [compact, setCompact] = useState(() => {
@@ -27,6 +29,31 @@ export default function Settings() {
   useEffect(() => {
     localStorage.setItem("notifications", notifications.toString());
   }, [notifications]);
+
+  const handleNotificationsChange = async (enabled: boolean) => {
+    if (!enabled) {
+      setNotifications(false);
+      return;
+    }
+
+    if (typeof window !== "undefined" && "Notification" in window) {
+      const permission =
+        Notification.permission === "default"
+          ? await Notification.requestPermission()
+          : Notification.permission;
+      if (permission === "denied") {
+        toast({
+          variant: "destructive",
+          title: t("notifications"),
+          description: t("notificationPermissionDenied"),
+        });
+        setNotifications(false);
+        return;
+      }
+    }
+
+    setNotifications(true);
+  };
 
   const handleReset = () => {
     setDark(false);
@@ -61,7 +88,7 @@ export default function Settings() {
           <h2 className="text-lg font-medium mb-2">{t("notifications")}</h2>
           <div className="flex items-center justify-between">
             <span>{t("enableNotifications")}</span>
-            <Switch checked={notifications} onCheckedChange={setNotifications} />
+            <Switch checked={notifications} onCheckedChange={handleNotificationsChange} />
           </div>
         </section>
 

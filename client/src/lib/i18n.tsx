@@ -276,6 +276,9 @@ const translations = {
     compactMode: 'Compact layout',
     notifications: 'Notifications',
     enableNotifications: 'Enable notifications',
+    noNotifications: 'No notifications yet',
+    markAllRead: 'Mark all read',
+    notificationPermissionDenied: 'System notifications are blocked. You can still see notifications inside the app.',
     resetSettings: 'Reset settings',
 
     // Auth
@@ -697,6 +700,9 @@ const translations = {
     compactMode: 'Modo compacto',
     notifications: 'Notificaciones',
     enableNotifications: 'Habilitar notificaciones',
+    noNotifications: 'Aún no hay notificaciones',
+    markAllRead: 'Marcar leídas',
+    notificationPermissionDenied: 'Las notificaciones del sistema están bloqueadas. Aún puedes verlas dentro de la app.',
     resetSettings: 'Restablecer configuración',
 
     // Auth

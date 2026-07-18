@@ -121,6 +121,49 @@ vi.mock('../storage', () => {
       reviewedAt: new Date(),
       reviewedBy: adminId,
     }),
+    createNotification: async (notification: any) => ({
+      id: 1,
+      readAt: null,
+      createdAt: new Date(),
+      ...notification,
+    }),
+    createNotifications: async (notifications: any[]) =>
+      notifications.map((notification, index) => ({
+        id: index + 1,
+        readAt: null,
+        createdAt: new Date(),
+        ...notification,
+      })),
+    getUserNotifications: async (userId: number) => [
+      {
+        id: 1,
+        userId,
+        title: 'Recordatorio de partido',
+        body: 'Team A vs Team B está programado para este momento.',
+        type: 'match_reminder',
+        link: '/matches/1',
+        entityType: 'match',
+        entityId: 1,
+        scheduledAt: new Date(),
+        readAt: null,
+        createdAt: new Date(),
+      },
+    ],
+    markNotificationRead: async (id: number, userId: number) => ({
+      id,
+      userId,
+      title: 'Recordatorio de partido',
+      body: 'Team A vs Team B está programado para este momento.',
+      type: 'match_reminder',
+      link: '/matches/1',
+      entityType: 'match',
+      entityId: 1,
+      scheduledAt: new Date(),
+      readAt: new Date(),
+      createdAt: new Date(),
+    }),
+    markAllNotificationsRead: async () => {},
+    deleteNotificationsForEntity: async () => {},
     getTournaments: async () => [],
     getTournamentById: async (id: number) => ({
       id,
@@ -235,6 +278,44 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(res.status).toBe(200);
     expect(spy).toHaveBeenCalledWith(42);
     expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it('returns due in-app notifications for the authenticated user', async () => {
+    const getNotifications = vi.spyOn(storage, 'getUserNotifications');
+
+    const res = await request(app).get('/api/notifications');
+
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({
+      userId: 1,
+      type: 'match_reminder',
+      readAt: null,
+    });
+    expect(getNotifications).toHaveBeenCalledWith(1, {
+      includeRead: false,
+      limit: 30,
+    });
+  });
+
+  it('marks a notification as read for the authenticated user', async () => {
+    const markRead = vi.spyOn(storage, 'markNotificationRead');
+
+    const res = await request(app).post('/api/notifications/7/read');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: 7, userId: 1 });
+    expect(res.body.readAt).toBeTruthy();
+    expect(markRead).toHaveBeenCalledWith(7, 1);
+  });
+
+  it('returns success when soft deleting a team', async () => {
+    const softDelete = vi.spyOn(storage, 'softDeleteTeam');
+
+    const res = await request(app).delete('/api/teams/5');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true });
+    expect(softDelete).toHaveBeenCalledWith(5);
   });
 
   it('allows the public role to read tournament standings', async () => {

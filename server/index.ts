@@ -240,6 +240,26 @@ app.use((req, res, next) => {
       ALTER COLUMN requested_role SET DEFAULT 'team_captain'
     `);
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id serial PRIMARY KEY,
+        user_id integer NOT NULL,
+        title text NOT NULL,
+        body text NOT NULL,
+        type text NOT NULL DEFAULT 'system',
+        link text,
+        entity_type text,
+        entity_id integer,
+        scheduled_at timestamp NOT NULL DEFAULT now(),
+        read_at timestamp,
+        created_at timestamp DEFAULT now()
+      )
+    `);
+    await db.execute(sql`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS entity_type text`);
+    await db.execute(sql`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS entity_id integer`);
+    await db.execute(sql`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS scheduled_at timestamp NOT NULL DEFAULT now()`);
+    await db.execute(sql`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS read_at timestamp`);
+    await db.execute(sql`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now()`);
+    await db.execute(sql`
       UPDATE users SET role = 'team_captain' WHERE role = 'team'
     `);
     await db.execute(sql`

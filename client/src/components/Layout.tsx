@@ -2,6 +2,7 @@ import { ReactNode, useState } from "react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { BottomNav } from "./BottomNav";
 import { LanguageSelector } from "./LanguageSelector";
+import { NotificationBell } from "./NotificationBell";
 import { UserProfile } from "./UserProfile";
 import { refreshAppData } from "@/lib/queryClient";
 import { ArrowLeft, RefreshCw } from "lucide-react";
@@ -53,6 +54,7 @@ export function Layout({ children, header, title, showBack }: LayoutProps) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <button
               title={t("refreshData")}
               className="rounded-full p-2 hover:bg-muted/20 disabled:opacity-60"
