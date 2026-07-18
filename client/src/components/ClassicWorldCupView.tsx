@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -12,6 +13,11 @@ type Props = {
   canManage?: boolean;
   onGenerateRoundOf16?: () => void;
   isGeneratingRoundOf16?: boolean;
+  onSaveManualRanks?: (
+    groupId: number,
+    ranks: Array<{ teamId: number; manualRank: number }>,
+  ) => void | Promise<void>;
+  isSavingManualRanks?: boolean;
 };
 
 const knockoutPhases = [
@@ -40,8 +46,11 @@ export function ClassicWorldCupView({
   canManage,
   onGenerateRoundOf16,
   isGeneratingRoundOf16,
+  onSaveManualRanks,
+  isSavingManualRanks,
 }: Props) {
   const { t, language } = useLanguage();
+  const [manualRanks, setManualRanks] = useState<Record<number, Record<number, string>>>({});
   if (isLoading) {
     return <p className="py-6 text-center text-sm text-muted-foreground">{t("loading")}</p>;
   }
@@ -69,6 +78,17 @@ export function ClassicWorldCupView({
   );
   const nameOf = (teamId?: number | null, fallback?: string | null) =>
     teamId ? teamById.get(teamId)?.name || t("teamFallback") : fallback || t("pending");
+  const getManualRank = (groupId: number, teamId: number, fallback: number) =>
+    manualRanks[groupId]?.[teamId] || String(fallback);
+  const setManualRank = (groupId: number, teamId: number, rank: string) => {
+    setManualRanks((current) => ({
+      ...current,
+      [groupId]: {
+        ...(current[groupId] || {}),
+        [teamId]: rank,
+      },
+    }));
+  };
 
   return (
     <Tabs defaultValue="summary" className="space-y-4">
@@ -164,9 +184,57 @@ export function ClassicWorldCupView({
               </tbody>
             </table>
             {group.standings.some((standing) => standing.unresolvedTie) && (
-              <p className="mt-2 text-xs text-amber-700">
-                {t("manualTieBreakRequired")}
-              </p>
+              <div className="mt-3 space-y-2 rounded-md border border-amber-200 bg-amber-50 p-2">
+                <p className="text-xs text-amber-800">{t("manualTieBreakRequired")}</p>
+                {canManage && onSaveManualRanks && (
+                  <>
+                    <p className="text-xs text-amber-900">{t("manualTieBreakOrder")}</p>
+                    <div className="space-y-2">
+                      {group.standings.map((standing, index) => (
+                        <label
+                          key={standing.teamId}
+                          className="flex items-center justify-between gap-2 text-xs"
+                        >
+                          <span className="min-w-0 flex-1 truncate font-medium">
+                            {standing.teamName}
+                          </span>
+                          <select
+                            className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+                            value={getManualRank(group.id, standing.teamId, index + 1)}
+                            onChange={(event) =>
+                              setManualRank(group.id, standing.teamId, event.target.value)
+                            }
+                          >
+                            {group.standings.map((_, rankIndex) => (
+                              <option key={rankIndex + 1} value={String(rankIndex + 1)}>
+                                {rankIndex + 1}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      disabled={isSavingManualRanks}
+                      onClick={() =>
+                        onSaveManualRanks(
+                          group.id,
+                          group.standings.map((standing, index) => ({
+                            teamId: standing.teamId,
+                            manualRank: Number(
+                              getManualRank(group.id, standing.teamId, index + 1),
+                            ),
+                          })),
+                        )
+                      }
+                    >
+                      {t("save")}
+                    </Button>
+                  </>
+                )}
+              </div>
             )}
           </Card>
         ))}

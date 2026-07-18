@@ -8,6 +8,7 @@ import {
   useGenerateWorldCupRoundOf16,
   useImportTournamentTeams,
   useRemoveTeamFromTournament,
+  useSetWorldCupManualRanks,
 } from "@/hooks/use-tournaments";
 import { useTeams } from "@/hooks/use-teams";
 import { useDeleteMatch, useMatches } from "@/hooks/use-matches";
@@ -98,6 +99,7 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const importTeams = useImportTournamentTeams();
   const generateMatches = useGenerateTournamentMatches();
   const generateRoundOf16 = useGenerateWorldCupRoundOf16();
+  const setWorldCupManualRanks = useSetWorldCupManualRanks();
   const removeTeam = useRemoveTeamFromTournament();
   const deleteMatch = useDeleteMatch();
   
@@ -434,6 +436,24 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
           isLoading={worldCupSummaryLoading}
           canManage={canManageTournaments}
           isGeneratingRoundOf16={generateRoundOf16.isPending}
+          isSavingManualRanks={setWorldCupManualRanks.isPending}
+          onSaveManualRanks={async (groupId, ranks) => {
+            try {
+              await setWorldCupManualRanks.mutateAsync({
+                tournamentId,
+                groupId,
+                ranks,
+              });
+              toast({ title: t("success") });
+            } catch (error) {
+              toast({
+                variant: "destructive",
+                title: t("error"),
+                description:
+                  error instanceof Error ? error.message : t("unexpectedError"),
+              });
+            }
+          }}
           onGenerateRoundOf16={async () => {
             try {
               await generateRoundOf16.mutateAsync(tournamentId);

@@ -459,6 +459,41 @@ export function useGenerateWorldCupRoundOf16() {
   });
 }
 
+export function useSetWorldCupManualRanks() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      tournamentId,
+      groupId,
+      ranks,
+    }: {
+      tournamentId: number;
+      groupId: number;
+      ranks: Array<{ teamId: number; manualRank: number }>;
+    }) => {
+      const res = await apiFetch(
+        `/api/tournaments/${tournamentId}/world-cup/groups/${groupId}/manual-ranks`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ranks }),
+          credentials: "include",
+        },
+      );
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.message || "Failed to save manual group ranks");
+      }
+      return res.json() as Promise<ClassicWorldCupSummary>;
+    },
+    onSuccess: (_summary, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["tournaments", variables.tournamentId, "world-cup"],
+      });
+    },
+  });
+}
+
 export function useRemoveTeamFromTournament() {
   const queryClient = useQueryClient();
   return useMutation<
