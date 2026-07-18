@@ -19,15 +19,8 @@ export interface SafeUser extends Omit<User, "password"> {}
 export interface SafeRegistrationRequest
   extends Omit<RegistrationRequest, "password"> {}
 
-export type EmailDelivery = {
-  status: "sent" | "skipped" | "failed";
-  success?: boolean;
-  provider?: "gmail-api" | "smtp" | "none";
-  message?: string;
-};
-
 export type ReviewRegistrationResult =
-  | (SafeUser & { emailDelivery?: EmailDelivery })
+  | SafeUser
   | SafeRegistrationRequest;
 
 type UserUpdateInput = {
@@ -114,9 +107,8 @@ function useReviewRegistrationRequest(action: "approve" | "reject") {
     },
     onSuccess: (result) => {
       if (action === "approve" && "role" in result) {
-        const { emailDelivery: _emailDelivery, ...safeUser } = result;
         updateOptimisticQueries(queryClient, usersPredicate, (data) =>
-          prependUniqueArrayItem(data, safeUser as SafeUser),
+          prependUniqueArrayItem(data, result),
         );
       }
     },

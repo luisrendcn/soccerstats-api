@@ -214,25 +214,16 @@ export default function AdminUsers() {
     if (!reviewRequest) return;
 
     try {
-      const result =
-        reviewRequest.action === "approve"
-          ? await approveRequest.mutateAsync(reviewRequest.id)
-          : await rejectRequest.mutateAsync(reviewRequest.id);
-
-      const emailDelivery =
-        reviewRequest.action === "approve" && "emailDelivery" in result
-          ? result.emailDelivery
-          : undefined;
+      if (reviewRequest.action === "approve") {
+        await approveRequest.mutateAsync(reviewRequest.id);
+      } else {
+        await rejectRequest.mutateAsync(reviewRequest.id);
+      }
 
       if (reviewRequest.action === "approve") {
         toast({
-          variant:
-            emailDelivery?.status === "failed" ? "destructive" : "default",
           title: t("requestProcessed"),
-          description:
-            emailDelivery?.status === "failed"
-              ? emailDelivery.message || t("approvalEmailNotSent")
-              : t("userCanEnterApp"),
+          description: t("userCanEnterApp"),
         });
       } else {
         toast({
