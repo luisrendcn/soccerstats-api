@@ -15,6 +15,12 @@ import { MatchCard } from "@/components/MatchCard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Loader2, ArrowLeft, Plus, Trash2, Calendar, Gamepad2, FileUp, CalendarPlus, Radio, Trash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -429,91 +435,114 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
 
         {!matchesLoading && !teamsLoading && (
           <>
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="flex items-center gap-2 font-display text-lg font-bold">
-                    <Radio className="h-5 w-5 text-red-500" />
-                    {t("liveMatches")}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {t("liveMatchesDescription")}
-                  </p>
-                </div>
-                <span className="rounded-full bg-background px-3 py-1 text-xs font-bold text-primary shadow-sm">
-                  {liveMatches.length}
-                </span>
-              </div>
-              {liveMatches.length ? (
-                <div className="grid gap-4">
-                  {liveMatches.map((match) => (
-                    <TwitchStreamCard key={match.id} match={match} />
-                  ))}
-                </div>
-              ) : (
-                <p className="rounded-xl border border-dashed border-border bg-background/70 p-4 text-center text-sm text-muted-foreground">
-                  {t("noLiveMatches")}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display text-lg font-bold">{t("scheduledMatches")}</h3>
-                <Badge className="bg-yellow-100 text-yellow-800">
-                  {scheduledMatches.length}
-                </Badge>
-              </div>
-              {scheduledMatches.length ? (
-                scheduledMatches.map((match) => (
-                  <div key={match.id} className="relative">
-                    <MatchCard match={match} />
-                    {canDeleteMatches && (
-                      <button
-                        title={t("deleteMatch")}
-                        className="absolute right-2 top-2 rounded-md bg-red-50 p-1 hover:bg-red-100"
-                        onClick={() => handleDeleteMatch(match.id)}
-                      >
-                        <Trash className="h-4 w-4 text-red-600" />
-                      </button>
-                    )}
+            <Accordion
+              type="multiple"
+              defaultValue={["live-matches"]}
+              className="space-y-3"
+            >
+              <AccordionItem
+                value="live-matches"
+                className="rounded-xl border border-primary/20 bg-primary/5 px-4 shadow-sm"
+              >
+                <AccordionTrigger className="items-start gap-3 py-4 text-left hover:no-underline">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 font-display text-lg font-bold">
+                      <Radio className="h-5 w-5 text-red-500" />
+                      {t("liveMatches")}
+                    </div>
+                    <p className="mt-1 text-sm font-normal text-muted-foreground">
+                      {t("liveMatchesDescription")}
+                    </p>
                   </div>
-                ))
-              ) : (
-                <Card className="p-5 text-center text-sm text-muted-foreground">
-                  {t("noScheduledMatches")}
-                </Card>
-              )}
-            </div>
+                  <Badge className="bg-background text-primary shadow-sm">
+                    {liveMatches.length}
+                  </Badge>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-4">
+                  {liveMatches.length ? (
+                    liveMatches.map((match) => (
+                      <TwitchStreamCard key={match.id} match={match} />
+                    ))
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-border bg-background/70 p-4 text-center text-sm text-muted-foreground">
+                      {t("noLiveMatches")}
+                    </p>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-display text-lg font-bold">{t("finishedMatches")}</h3>
-                <Badge className="bg-red-100 text-red-700">
-                  {finishedMatches.length}
-                </Badge>
-              </div>
-              {finishedMatches.length ? (
-                finishedMatches.map((match) => (
-                  <div key={match.id} className="relative">
-                    <MatchCard match={match} />
-                    {canDeleteMatches && (
-                      <button
-                        title={t("deleteMatch")}
-                        className="absolute right-2 top-2 rounded-md bg-red-50 p-1 hover:bg-red-100"
-                        onClick={() => handleDeleteMatch(match.id)}
-                      >
-                        <Trash className="h-4 w-4 text-red-600" />
-                      </button>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <Card className="p-5 text-center text-sm text-muted-foreground">
-                  {t("noFinishedMatches")}
-                </Card>
-              )}
-            </div>
+              <AccordionItem
+                value="scheduled-matches"
+                className="rounded-xl border border-border bg-card px-4 shadow-sm"
+              >
+                <AccordionTrigger className="gap-3 py-4 text-left hover:no-underline">
+                  <span className="font-display text-lg font-bold">
+                    {t("scheduledMatches")}
+                  </span>
+                  <Badge className="ml-auto bg-yellow-100 text-yellow-800">
+                    {scheduledMatches.length}
+                  </Badge>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-3">
+                  {scheduledMatches.length ? (
+                    scheduledMatches.map((match) => (
+                      <div key={match.id} className="relative">
+                        <MatchCard match={match} />
+                        {canDeleteMatches && (
+                          <button
+                            title={t("deleteMatch")}
+                            className="absolute right-2 top-2 rounded-md bg-red-50 p-1 hover:bg-red-100"
+                            onClick={() => handleDeleteMatch(match.id)}
+                          >
+                            <Trash className="h-4 w-4 text-red-600" />
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+                      {t("noScheduledMatches")}
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem
+                value="finished-matches"
+                className="rounded-xl border border-border bg-card px-4 shadow-sm"
+              >
+                <AccordionTrigger className="gap-3 py-4 text-left hover:no-underline">
+                  <span className="font-display text-lg font-bold">
+                    {t("finishedMatches")}
+                  </span>
+                  <Badge className="ml-auto bg-red-100 text-red-700">
+                    {finishedMatches.length}
+                  </Badge>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-3">
+                  {finishedMatches.length ? (
+                    finishedMatches.map((match) => (
+                      <div key={match.id} className="relative">
+                        <MatchCard match={match} />
+                        {canDeleteMatches && (
+                          <button
+                            title={t("deleteMatch")}
+                            className="absolute right-2 top-2 rounded-md bg-red-50 p-1 hover:bg-red-100"
+                            onClick={() => handleDeleteMatch(match.id)}
+                          >
+                            <Trash className="h-4 w-4 text-red-600" />
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+                      {t("noFinishedMatches")}
+                    </div>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </>
         )}
       </section>
