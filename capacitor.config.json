@@ -1,6 +1,6 @@
 {
   "appId": "com.soccerstats.app",
-  "appName": "Soccer Stats",
+  "appName": "soccerstats",
   "webDir": "dist/public",
   "bundledWebRuntime": false,
   "server": {
