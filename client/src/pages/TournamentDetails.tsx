@@ -61,7 +61,6 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const { toast } = useToast();
   const { t, language } = useLanguage();
   const { data: auth } = useAuth();
-  const isPublic = auth?.userRole === 'public';
   const canManageTournaments = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager';
   
   const { data: tournament, isLoading: tournamentLoading } = useTournament(tournamentId);
@@ -361,10 +360,10 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
         </div>
       </Card>
 
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
-          <h2 className="text-2xl font-bold">{t("participantTeams")}</h2>
-          {canManageTournaments && (
+      {canManageTournaments && (
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+            <h2 className="text-2xl font-bold">{t("participantTeams")}</h2>
             <div className="flex flex-wrap gap-2">
               <Dialog open={isImportTeamsOpen} onOpenChange={setIsImportTeamsOpen}>
                 <DialogTrigger asChild>
@@ -582,41 +581,39 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                 {t("scheduleNewMatch")}
               </Button>
             </div>
-          )}
-        </div>
-
-        {(teamsLoading || tournamentTeamsLoading) && (
-          <div className="flex justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
-        )}
 
-        {canManageTournaments && hasOddTeamCount && (
-          <Card className="border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-            {t("oddTeamsBlocked")}
-          </Card>
-        )}
+          {(teamsLoading || tournamentTeamsLoading) && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          )}
 
-        {tournamentTeams && tournamentTeams.length === 0 ? (
-          <Card className="p-8 text-center">
-            <p className="text-muted-foreground mb-4">{t("noTeamsInTournament")}</p>
-          </Card>
-        ) : (
-          <div className="grid gap-3">
-            {tournamentTeams?.map((team) => (
-              <Card key={team.id} className="p-4 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <TeamColorCircleSmall color={team.color} />
-                  <div>
-                    <span className="font-semibold">{team.name}</span>
-                    {isVideogameTournament && (
-                      <p className="text-xs text-muted-foreground">
-                        Twitch: @{team.twitchChannel || t("noChannel")}
-                      </p>
-                    )}
+          {hasOddTeamCount && (
+            <Card className="border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              {t("oddTeamsBlocked")}
+            </Card>
+          )}
+
+          {tournamentTeams && tournamentTeams.length === 0 ? (
+            <Card className="p-8 text-center">
+              <p className="text-muted-foreground mb-4">{t("noTeamsInTournament")}</p>
+            </Card>
+          ) : (
+            <div className="grid gap-3">
+              {tournamentTeams?.map((team) => (
+                <Card key={team.id} className="p-4 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <TeamColorCircleSmall color={team.color} />
+                    <div>
+                      <span className="font-semibold">{team.name}</span>
+                      {isVideogameTournament && (
+                        <p className="text-xs text-muted-foreground">
+                          Twitch: @{team.twitchChannel || t("noChannel")}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {canManageTournaments && (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -624,12 +621,12 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
-                )}
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {canManageTournaments && availableTeams && availableTeams.length > 0 && (
         <Card className="p-6">
@@ -681,28 +678,30 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
         </Card>
       )}
 
-      <AlertDialog
-        open={removingTeamId !== null}
-        onOpenChange={(open) => !open && setRemovingTeamId(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("removeTeam")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("removeTeamDescription")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex gap-2">
-            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => removingTeamId && handleRemoveTeam(removingTeamId)}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {t("remove")}
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      {canManageTournaments && (
+        <AlertDialog
+          open={removingTeamId !== null}
+          onOpenChange={(open) => !open && setRemovingTeamId(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("removeTeam")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("removeTeamDescription")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="flex gap-2">
+              <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => removingTeamId && handleRemoveTeam(removingTeamId)}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {t("remove")}
+              </AlertDialogAction>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
