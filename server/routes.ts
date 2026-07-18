@@ -1050,6 +1050,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No puedes eliminar a un administrador" });
       }
 
+      if (normalizeStoredUserRole(user.role) === "tournament_manager") {
+        const managerTournaments = (await storage.getTournaments()).filter(
+          (tournament) => tournament.createdBy === user.id,
+        );
+        for (const tournament of managerTournaments) {
+          await storage.deleteTournament(tournament.id);
+        }
+      }
+
       await storage.deleteUser(userId);
       await storage.deleteRegistrationRequestsByEmail(user.email);
       res.json({ success: true });
@@ -1170,6 +1179,26 @@ export async function registerRoutes(
     return null;
   };
 
+  const publicCanReadTournament = async (req: Request, tournament: Tournament) => {
+    const viewerId = (req.session as any).userId;
+    const viewer = viewerId ? await storage.getUserById(viewerId) : null;
+    const viewerRole =
+      viewer && viewer.isActive !== false
+        ? normalizeStoredUserRole(viewer.role)
+        : "public";
+    if (viewerRole !== "public") return true;
+
+    const owner = await storage.getUserById(tournament.createdBy);
+    return owner ? owner.isActive !== false : true;
+  };
+
+  const denyBlockedTournamentForPublic = (res: Response) =>
+    res.status(403).json({
+      message:
+        "Este torneo no está disponible públicamente porque su gestor está bloqueado",
+      code: "TOURNAMENT_MANAGER_BLOCKED",
+    });
+
   app.get("/api/tournaments", async (_req, res) => {
     try {
       const tournaments = await storage.getTournaments();
@@ -1186,6 +1215,9 @@ export async function registerRoutes(
 
       if (!tournament) {
         return res.status(404).json({ message: "Torneo no encontrado" });
+      }
+      if (!(await publicCanReadTournament(req, tournament))) {
+        return denyBlockedTournamentForPublic(res);
       }
 
       res.json(tournament);
@@ -1443,6 +1475,13 @@ export async function registerRoutes(
   app.get("/api/tournaments/:id/teams", async (req, res) => {
     try {
       const tournamentId = Number(req.params.id);
+      const tournament = await storage.getTournamentById(tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ message: "Torneo no encontrado" });
+      }
+      if (!(await publicCanReadTournament(req, tournament))) {
+        return denyBlockedTournamentForPublic(res);
+      }
       const teams = await storage.getTournamentTeams(tournamentId);
       res.json(teams);
     } catch (err) {
@@ -2240,6 +2279,9 @@ export async function registerRoutes(
     const tournament = await storage.getTournamentById(tournamentId);
     if (!tournament) {
       return res.status(404).json({ message: "Torneo no encontrado" });
+    }
+    if (!(await publicCanReadTournament(req, tournament))) {
+      return denyBlockedTournamentForPublic(res);
     }
 
     const standings = await storage.getStandings(tournamentId);

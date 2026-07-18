@@ -64,7 +64,11 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const { data: auth } = useAuth();
   const canManageTournaments = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager';
   
-  const { data: tournament, isLoading: tournamentLoading } = useTournament(tournamentId);
+  const {
+    data: tournament,
+    error: tournamentError,
+    isLoading: tournamentLoading,
+  } = useTournament(tournamentId);
   const { data: teams, isLoading: teamsLoading } = useTeams();
   const { data: tournamentTeams, isLoading: tournamentTeamsLoading } = useTournamentTeams(tournamentId);
   
@@ -281,7 +285,11 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
           {t("goBack")}
         </Button>
         <Card className="p-8 text-center">
-          <p className="text-muted-foreground">{t("tournamentNotFound")}</p>
+          <p className="text-muted-foreground">
+            {tournamentError instanceof Error
+              ? tournamentError.message
+              : t("tournamentNotFound")}
+          </p>
         </Card>
       </div>
     );

@@ -41,10 +41,14 @@ export function useTournament(id: number) {
     queryKey: ["tournaments", id],
     queryFn: async () => {
       const res = await apiFetch(`/api/tournaments/${id}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch tournament");
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.message || "Failed to fetch tournament");
+      }
       return res.json() as Promise<Tournament>;
     },
     enabled: !!id,
+    retry: false,
   });
 }
 

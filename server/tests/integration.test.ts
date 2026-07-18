@@ -350,6 +350,67 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 
+  it('blocks public access to tournaments created by a blocked manager', async () => {
+    const unauthApp = buildApp();
+    const getTournamentById = vi
+      .spyOn(storage, 'getTournamentById')
+      .mockResolvedValueOnce({
+        id: 42,
+        name: 'Blocked Manager Cup',
+        createdBy: 4,
+        tournamentType: 'soccer',
+      } as any);
+    const getUserById = vi.spyOn(storage, 'getUserById').mockImplementation(async (id: number) => ({
+      id,
+      email: 'manager@example.com',
+      password: 'unused',
+      name: 'Blocked Manager',
+      role: 'tournament_manager',
+      teamId: null,
+      isActive: false,
+    }) as any);
+
+    const res = await request(unauthApp).get('/api/tournaments/42');
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      code: 'TOURNAMENT_MANAGER_BLOCKED',
+    });
+    expect(getTournamentById).toHaveBeenCalledWith(42);
+
+    getUserById.mockRestore();
+    getTournamentById.mockRestore();
+  });
+
+  it('allows admins to open tournaments created by a blocked manager', async () => {
+    const getTournamentById = vi
+      .spyOn(storage, 'getTournamentById')
+      .mockResolvedValueOnce({
+        id: 42,
+        name: 'Blocked Manager Cup',
+        createdBy: 4,
+        tournamentType: 'soccer',
+      } as any);
+    const getUserById = vi.spyOn(storage, 'getUserById').mockImplementation(async (id: number) => ({
+      id,
+      email: id === 1 ? 'admin@example.com' : 'manager@example.com',
+      password: 'unused',
+      name: id === 1 ? 'Admin' : 'Blocked Manager',
+      role: id === 1 ? 'admin' : 'tournament_manager',
+      teamId: null,
+      isActive: id === 1,
+    }) as any);
+
+    const res = await request(app).get('/api/tournaments/42');
+
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Blocked Manager Cup');
+    expect(getTournamentById).toHaveBeenCalledWith(42);
+
+    getUserById.mockRestore();
+    getTournamentById.mockRestore();
+  });
+
   it('requires a tournament when requesting standings', async () => {
     const res = await request(app).get('/api/standings');
 
@@ -960,6 +1021,33 @@ describe('Authorization edge cases', () => {
     expect(res.body).toEqual({ success: true });
     expect(deleteUser).toHaveBeenCalledWith(8);
     expect(deleteRegistrationRequests).toHaveBeenCalledWith('active@example.com');
+  });
+
+  it('deletes tournaments created by a tournament manager when permanently deleting them', async () => {
+    vi.spyOn(storage, 'getUserById').mockImplementation(async (id: number) => ({
+      id,
+      email: id === 1 ? 'admin@example.com' : 'manager@example.com',
+      password: 'hidden',
+      name: id === 1 ? 'Admin' : 'Manager',
+      role: id === 1 ? 'admin' : 'tournament_manager',
+      teamId: null,
+      isActive: true,
+    }) as any);
+    vi.spyOn(storage, 'getTournaments').mockResolvedValueOnce([
+      { id: 41, createdBy: 4, name: 'Manager Cup' },
+      { id: 42, createdBy: 99, name: 'Other Cup' },
+      { id: 43, createdBy: 4, name: 'Manager League' },
+    ] as any);
+    const deleteTournament = vi.spyOn(storage, 'deleteTournament');
+    const deleteUser = vi.spyOn(storage, 'deleteUser');
+
+    const res = await request(app).delete('/api/admin/users/4/permanent');
+
+    expect(res.status).toBe(200);
+    expect(deleteTournament).toHaveBeenCalledWith(41);
+    expect(deleteTournament).toHaveBeenCalledWith(43);
+    expect(deleteTournament).not.toHaveBeenCalledWith(42);
+    expect(deleteUser).toHaveBeenCalledWith(4);
   });
 
   it('does not allow an admin to permanently delete their own account', async () => {
