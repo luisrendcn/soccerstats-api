@@ -26,7 +26,7 @@ import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import type { MatchHighlight } from "@shared/schema";
+import type { MatchHighlight, Team } from "@shared/schema";
 import { useLanguage } from "@/lib/i18n.tsx";
 
 const highlightTypeKeys = {
@@ -166,8 +166,8 @@ export default function MatchDetails() {
   const { data: highlights, isLoading: highlightsLoading } =
     useMatchHighlights(matchId);
   
-  const { data: homeTeam } = useTeam(match?.homeTeamId || 0);
-  const { data: awayTeam } = useTeam(match?.awayTeamId || 0);
+  const { data: rawHomeTeam } = useTeam(match?.homeTeamId || 0);
+  const { data: rawAwayTeam } = useTeam(match?.awayTeamId || 0);
   const { data: tournament } = useTournament(match?.tournamentId || 0);
   const { data: tournamentTeams } = useTournamentTeams(match?.tournamentId || 0);
   
@@ -232,7 +232,33 @@ export default function MatchDetails() {
     awayScore: number;
   } | null>(null);
 
-  const isLoading = matchLoading || goalsLoading || !match || !homeTeam || !awayTeam;
+  const fallbackTeam = (
+    id: number,
+    name: string,
+  ) =>
+    ({
+      id,
+      name,
+      color: "#64748b",
+      twitchChannel: null,
+      deletedAt: null,
+    }) as Team;
+  const homeTeam =
+    rawHomeTeam ||
+    fallbackTeam(
+      match?.homeTeamId || -1,
+      match?.homeSourceType || t("pending"),
+    );
+  const awayTeam =
+    rawAwayTeam ||
+    fallbackTeam(
+      match?.awayTeamId || -2,
+      match?.awaySourceType || t("pending"),
+    );
+  const hasBothMatchTeams = Boolean(
+    match?.homeTeamId && match?.awayTeamId && rawHomeTeam && rawAwayTeam,
+  );
+  const isLoading = matchLoading || goalsLoading || !match;
   const isFinished = match?.status === "finished";
   const isLive = match?.status === "live";
   const isClassicWorldCupKnockout =
@@ -656,7 +682,7 @@ export default function MatchDetails() {
                   label={`${t("goals")} ${homeTeam.name}`}
                   value={displayedHomeScore}
                   onChange={(score) => handleScoreWheelChange("home", score)}
-                  disabled={!canModifyMatch || isFinished}
+                  disabled={!canModifyMatch || isFinished || !hasBothMatchTeams}
                 />
                 <span className="text-2xl font-mono font-bold text-muted-foreground sm:text-3xl">
                   -
@@ -665,12 +691,17 @@ export default function MatchDetails() {
                   label={`${t("goals")} ${awayTeam.name}`}
                   value={displayedAwayScore}
                   onChange={(score) => handleScoreWheelChange("away", score)}
-                  disabled={!canModifyMatch || isFinished}
+                  disabled={!canModifyMatch || isFinished || !hasBothMatchTeams}
                 />
               </div>
-              {canModifyMatch && !isFinished && (
+              {canModifyMatch && !isFinished && hasBothMatchTeams && (
                 <p className="mt-2 max-w-36 text-center text-[10px] leading-tight text-muted-foreground sm:max-w-48 sm:text-[11px]">
                   {t("slideScoreHint")}
+                </p>
+              )}
+              {!hasBothMatchTeams && (
+                <p className="mt-2 max-w-40 text-center text-[10px] leading-tight text-amber-700 sm:max-w-56 sm:text-[11px]">
+                  {t("pendingKnockoutTeams")}
                 </p>
               )}
               <div className="mt-2 text-xs text-muted-foreground font-medium uppercase tracking-wider">
@@ -695,7 +726,7 @@ export default function MatchDetails() {
         {/* Actions */}
         {!isFinished && (
           <div className="p-4 bg-muted/10 border-t border-border grid grid-cols-2 gap-3">
-            {canModifyMatch && (
+            {canModifyMatch && hasBothMatchTeams && (
               <>
               <Dialog open={isGoalDialogOpen} onOpenChange={setIsGoalDialogOpen}>
               <DialogTrigger asChild>
