@@ -8,15 +8,25 @@ import {
   useRemoveTeamFromTournament,
 } from "@/hooks/use-tournaments";
 import { useTeams } from "@/hooks/use-teams";
+import { useDeleteMatch, useMatches } from "@/hooks/use-matches";
 import { useLocation } from "wouter";
 import { TeamColorCircleSmall } from "@/components/TeamColor";
+import { MatchCard } from "@/components/MatchCard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, Plus, Trash2, Calendar, Gamepad2, FileUp, CalendarPlus } from "lucide-react";
+import { Loader2, ArrowLeft, Plus, Trash2, Calendar, Gamepad2, FileUp, CalendarPlus, Radio, Trash } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useQueries } from "@tanstack/react-query";
+import {
+  fetchTwitchStreamStatus,
+  getTwitchChannelFromMatch,
+  getTwitchStreamQueryKey,
+  isTwitchStreamVisible,
+  TwitchStreamCard,
+} from "@/components/TwitchStreamCard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -71,12 +81,14 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   } = useTournament(tournamentId);
   const { data: teams, isLoading: teamsLoading } = useTeams();
   const { data: tournamentTeams, isLoading: tournamentTeamsLoading } = useTournamentTeams(tournamentId);
+  const { data: matches, isLoading: matchesLoading } = useMatches(1, 1000, "", tournamentId);
   
   const addTeam = useAddTeamToTournament();
   const createTeam = useCreateTournamentTeam();
   const importTeams = useImportTournamentTeams();
   const generateMatches = useGenerateTournamentMatches();
   const removeTeam = useRemoveTeamFromTournament();
+  const deleteMatch = useDeleteMatch();
   
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [removingTeamId, setRemovingTeamId] = useState<number | null>(null);
@@ -93,6 +105,41 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
   const [scheduleIntervalDays, setScheduleIntervalDays] = useState("7");
   const [scheduleLocation, setScheduleLocation] = useState("");
   const isVideogameTournament = tournament?.tournamentType === "videogame";
+  const canDeleteMatches = auth?.userRole === "admin";
+
+  const enrichedMatches = matches
+    ?.filter((match) => match.tournamentId === tournamentId)
+    ?.map((match) => ({
+      ...match,
+      homeTeam: teams?.find((team) => team.id === match.homeTeamId),
+      awayTeam: teams?.find((team) => team.id === match.awayTeamId),
+      tournament,
+    }))
+    .filter((match) => match.homeTeam && match.awayTeam) || [];
+  const streamMatches = enrichedMatches.filter(
+    (match) => match.status === "live" && Boolean(getTwitchChannelFromMatch(match)),
+  );
+  const streamStatusQueries = useQueries({
+    queries: streamMatches.map((match) => {
+      const channel = getTwitchChannelFromMatch(match)!;
+      return {
+        queryKey: getTwitchStreamQueryKey(channel),
+        queryFn: () => fetchTwitchStreamStatus(channel),
+        staleTime: 15_000,
+        refetchInterval: 15_000,
+        retry: false,
+      };
+    }),
+  });
+  const liveMatches = streamMatches.filter((match, index) =>
+    isTwitchStreamVisible(match, streamStatusQueries[index]?.data),
+  );
+  const scheduledMatches = enrichedMatches
+    .filter((match) => match.status === "scheduled")
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const finishedMatches = enrichedMatches
+    .filter((match) => match.status === "finished")
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const handleCreateTeam = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -265,6 +312,19 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
     }
   };
 
+  const handleDeleteMatch = async (matchId: number) => {
+    if (!confirm(t("deleteMatchConfirm"))) return;
+    try {
+      await deleteMatch.mutateAsync(matchId);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: t("error"),
+        description: t("deleteMatchFailed"),
+      });
+    }
+  };
+
   if (tournamentLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -352,6 +412,111 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
 
       {/* standings for this tournament */}
       <StandingsTable tournamentId={tournamentId} title={standingsTitle} />
+
+      <section className="space-y-5">
+        <div>
+          <h2 className="text-2xl font-bold">{t("tournamentMatches")}</h2>
+          <p className="text-sm text-muted-foreground">
+            {t("tournamentMatchesDescription")}
+          </p>
+        </div>
+
+        {(matchesLoading || teamsLoading) && (
+          <div className="flex justify-center py-6">
+            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          </div>
+        )}
+
+        {!matchesLoading && !teamsLoading && (
+          <>
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="flex items-center gap-2 font-display text-lg font-bold">
+                    <Radio className="h-5 w-5 text-red-500" />
+                    {t("liveMatches")}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {t("liveMatchesDescription")}
+                  </p>
+                </div>
+                <span className="rounded-full bg-background px-3 py-1 text-xs font-bold text-primary shadow-sm">
+                  {liveMatches.length}
+                </span>
+              </div>
+              {liveMatches.length ? (
+                <div className="grid gap-4">
+                  {liveMatches.map((match) => (
+                    <TwitchStreamCard key={match.id} match={match} />
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-dashed border-border bg-background/70 p-4 text-center text-sm text-muted-foreground">
+                  {t("noLiveMatches")}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-display text-lg font-bold">{t("scheduledMatches")}</h3>
+                <Badge className="bg-yellow-100 text-yellow-800">
+                  {scheduledMatches.length}
+                </Badge>
+              </div>
+              {scheduledMatches.length ? (
+                scheduledMatches.map((match) => (
+                  <div key={match.id} className="relative">
+                    <MatchCard match={match} />
+                    {canDeleteMatches && (
+                      <button
+                        title={t("deleteMatch")}
+                        className="absolute right-2 top-2 rounded-md bg-red-50 p-1 hover:bg-red-100"
+                        onClick={() => handleDeleteMatch(match.id)}
+                      >
+                        <Trash className="h-4 w-4 text-red-600" />
+                      </button>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <Card className="p-5 text-center text-sm text-muted-foreground">
+                  {t("noScheduledMatches")}
+                </Card>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-display text-lg font-bold">{t("finishedMatches")}</h3>
+                <Badge className="bg-red-100 text-red-700">
+                  {finishedMatches.length}
+                </Badge>
+              </div>
+              {finishedMatches.length ? (
+                finishedMatches.map((match) => (
+                  <div key={match.id} className="relative">
+                    <MatchCard match={match} />
+                    {canDeleteMatches && (
+                      <button
+                        title={t("deleteMatch")}
+                        className="absolute right-2 top-2 rounded-md bg-red-50 p-1 hover:bg-red-100"
+                        onClick={() => handleDeleteMatch(match.id)}
+                      >
+                        <Trash className="h-4 w-4 text-red-600" />
+                      </button>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <Card className="p-5 text-center text-sm text-muted-foreground">
+                  {t("noFinishedMatches")}
+                </Card>
+              )}
+            </div>
+          </>
+        )}
+      </section>
 
       <Card className="p-6">
         <div className="grid grid-cols-3 gap-4 text-sm">

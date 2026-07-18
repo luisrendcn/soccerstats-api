@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { Switch, Route } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -15,7 +15,6 @@ const Register = lazy(() => import("@/pages/Register"));
 const Home = lazy(() => import("@/pages/Home"));
 const Teams = lazy(() => import("@/pages/Teams"));
 const TeamDetails = lazy(() => import("@/pages/TeamDetails"));
-const Matches = lazy(() => import("@/pages/Matches"));
 const MatchDetails = lazy(() => import("@/pages/MatchDetails"));
 const CreateMatch = lazy(() => import("@/pages/CreateMatch"));
 const AdminUsers = lazy(() => import("@/pages/AdminUsers"));
@@ -32,6 +31,14 @@ function RouteFallback() {
   );
 }
 
+function RedirectToTournaments() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation("/tournaments");
+  }, [setLocation]);
+  return <RouteFallback />;
+}
+
 function Router() {
   const tournamentManagers = ["admin", "tournament_manager"];
 
@@ -42,7 +49,7 @@ function Router() {
       <Route path="/" component={() => <ProtectedRoute component={Home} allowPublic />} />
       <Route path="/teams" component={() => <ProtectedRoute component={Teams} allowPublic />} />
       <Route path="/teams/:id" component={() => <ProtectedRoute component={TeamDetails} allowPublic />} />
-      <Route path="/matches" component={() => <ProtectedRoute component={Matches} allowPublic />} />
+      <Route path="/matches" component={RedirectToTournaments} />
       <Route path="/matches/:id" component={() => <ProtectedRoute component={MatchDetails} allowPublic />} />
       <Route path="/tournaments" component={() => <ProtectedRoute component={Tournaments} allowPublic />} />
       <Route path="/tournaments/new" component={() => <ProtectedRoute component={CreateTournament} requiredRole={tournamentManagers} />} />

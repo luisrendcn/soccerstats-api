@@ -487,6 +487,25 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 
+  it('filters matches by tournament when tournamentId is provided', async () => {
+    vi.spyOn(storage, 'getTournamentById').mockResolvedValueOnce({
+      id: 42,
+      name: 'Tournament 42',
+      createdBy: 1,
+      tournamentType: 'soccer',
+    } as any);
+    vi.spyOn(storage, 'getMatches').mockResolvedValueOnce([
+      { id: 1, tournamentId: 42, homeTeamId: 1, awayTeamId: 2 },
+      { id: 2, tournamentId: 7, homeTeamId: 3, awayTeamId: 4 },
+      { id: 3, tournamentId: 42, homeTeamId: 5, awayTeamId: 6 },
+    ] as any);
+
+    const res = await request(app).get('/api/matches?tournamentId=42');
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((match: any) => match.id)).toEqual([1, 3]);
+  });
+
   it('creates a team inside a tournament and enrolls it immediately', async () => {
     const createTeam = vi.spyOn(storage, 'createTeam');
     const enrollTeam = vi.spyOn(storage, 'addTeamToTournament');

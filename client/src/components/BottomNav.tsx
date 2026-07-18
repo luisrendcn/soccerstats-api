@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Trophy, Calendar, Users, Zap } from "lucide-react";
+import { Trophy, Users, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/lib/i18n.tsx";
 
@@ -7,7 +7,6 @@ const BASE_NAV_ITEMS = [
   { href: "/", labelKey: "home", icon: Trophy },
   { href: "/tournaments", labelKey: "tournaments", icon: Zap },
   { href: "/teams", labelKey: "teams", icon: Users },
-  { href: "/matches", labelKey: "matches", icon: Calendar },
 ] as const;
 
 export function BottomNav() {
@@ -18,7 +17,10 @@ export function BottomNav() {
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border/50 pb-safe">
       <div className="flex justify-around items-center h-16 max-w-md mx-auto px-2">
         {BASE_NAV_ITEMS.map((item) => {
-          const isActive = location === item.href;
+          const isActive =
+            item.href === "/"
+              ? location === item.href
+              : location === item.href || location.startsWith(`${item.href}/`);
           const Icon = item.icon;
 
           return (

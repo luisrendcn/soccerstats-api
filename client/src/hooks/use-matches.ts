@@ -20,17 +20,18 @@ import {
   writePersistentCache,
 } from "@/lib/persistentCache";
 
-export function useMatches(page = 1, limit = 10, search = "") {
-  const cacheKey = `matches:${page}:${limit}:${search}`;
+export function useMatches(page = 1, limit = 10, search = "", tournamentId?: number) {
+  const cacheKey = `matches:${page}:${limit}:${search}:${tournamentId || "all"}`;
   const cached = readPersistentCache<Awaited<ReturnType<typeof api.matches.list.responses[200]["parse"]>>>(cacheKey);
 
   return useQuery({
-    queryKey: [api.matches.list.path, page, limit, search],
+    queryKey: [api.matches.list.path, page, limit, search, tournamentId || null],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('limit', String(limit));
       if (search) params.set('search', search);
+      if (tournamentId) params.set('tournamentId', String(tournamentId));
       const res = await apiFetch(`${api.matches.list.path}?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch matches');
       const matches = api.matches.list.responses[200].parse(await res.json());

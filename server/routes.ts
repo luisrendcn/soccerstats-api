@@ -1740,9 +1740,32 @@ export async function registerRoutes(
     res.json(streamStatus);
   });
 
-  app.get(api.matches.list.path, requirePermission("matches", "read"), async (_req, res) => {
+  app.get(api.matches.list.path, requirePermission("matches", "read"), async (req, res) => {
+    let tournamentId: number | undefined;
+    if (req.query.tournamentId) {
+      const parsedTournamentId = Number(req.query.tournamentId);
+      if (!Number.isInteger(parsedTournamentId) || parsedTournamentId <= 0) {
+        return res.status(400).json({ message: "tournamentId válido es requerido" });
+      }
+      tournamentId = parsedTournamentId;
+    }
+
+    if (tournamentId) {
+      const tournament = await storage.getTournamentById(tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ message: "Torneo no encontrado" });
+      }
+      if (!(await publicCanReadTournament(req, tournament))) {
+        return denyBlockedTournamentForPublic(res);
+      }
+    }
+
     const matches = await storage.getMatches();
-    res.json(matches);
+    res.json(
+      tournamentId
+        ? matches.filter((match) => match.tournamentId === tournamentId)
+        : matches,
+    );
   });
 
   app.get(api.matches.get.path, requirePermission("matches", "read"), async (req, res) => {

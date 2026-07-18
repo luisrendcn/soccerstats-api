@@ -104,7 +104,7 @@ export default function Home() {
 
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-display">{t('recentResults')}</h2>
-          <Link href="/matches" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">{t('viewSchedule')}</Link>
+          <Link href="/tournaments" className="text-xs text-primary font-bold uppercase tracking-wider hover:underline">{t('viewSchedule')}</Link>
         </div>
         {isFetching && bootstrap && (
           <p className="mb-3 text-xs text-muted-foreground">
