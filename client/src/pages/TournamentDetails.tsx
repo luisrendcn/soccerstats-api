@@ -849,54 +849,66 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
             </div>
           </div>
 
-          {(teamsLoading || tournamentTeamsLoading) && (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            </div>
-          )}
-
-          {isClassicWorldCup && teamCount !== 32 && (
-            <Card className="border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              {t("classicWorldCupRequires32")}
-            </Card>
-          )}
-
-          {!isClassicWorldCup && hasOddTeamCount && (
-            <Card className="border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              {t("oddTeamsBlocked")}
-            </Card>
-          )}
-
-          {tournamentTeams && tournamentTeams.length === 0 ? (
-            <Card className="p-8 text-center">
-              <p className="text-muted-foreground mb-4">{t("noTeamsInTournament")}</p>
-            </Card>
-          ) : (
-            <div className="grid gap-3">
-              {tournamentTeams?.map((team) => (
-                <Card key={team.id} className="p-4 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <TeamColorCircleSmall color={team.color} />
-                    <div>
-                      <span className="font-semibold">{team.name}</span>
-                      {isVideogameTournament && (
-                        <p className="text-xs text-muted-foreground">
-                          Twitch: @{team.twitchChannel || t("noChannel")}
-                        </p>
-                      )}
-                    </div>
+          <Accordion type="single" collapsible className="rounded-lg border border-border">
+            <AccordionItem value="participant-teams" className="border-none">
+              <AccordionTrigger className="px-4 py-3">
+                <div className="flex items-center gap-2 text-left">
+                  <span>{t("participantTeams")}</span>
+                  <Badge variant="secondary">{teamCount}</Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="space-y-4 px-4 pb-4">
+                {(teamsLoading || tournamentTeamsLoading) && (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
                   </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setRemovingTeamId(team.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </Card>
-              ))}
-            </div>
-          )}
+                )}
+
+                {isClassicWorldCup && teamCount !== 32 && (
+                  <Card className="border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                    {t("classicWorldCupRequires32")}
+                  </Card>
+                )}
+
+                {!isClassicWorldCup && hasOddTeamCount && (
+                  <Card className="border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                    {t("oddTeamsBlocked")}
+                  </Card>
+                )}
+
+                {tournamentTeams && tournamentTeams.length === 0 ? (
+                  <Card className="p-8 text-center">
+                    <p className="text-muted-foreground mb-4">{t("noTeamsInTournament")}</p>
+                  </Card>
+                ) : (
+                  <div className="grid gap-3">
+                    {tournamentTeams?.map((team) => (
+                      <Card key={team.id} className="p-4 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <TeamColorCircleSmall color={team.color} />
+                          <div>
+                            <span className="font-semibold">{team.name}</span>
+                            {isVideogameTournament && (
+                              <p className="text-xs text-muted-foreground">
+                                Twitch: @{team.twitchChannel || t("noChannel")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setRemovingTeamId(team.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </div>
       )}
 

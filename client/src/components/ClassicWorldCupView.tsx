@@ -78,6 +78,9 @@ export function ClassicWorldCupView({
   );
   const nameOf = (teamId?: number | null, fallback?: string | null) =>
     teamId ? teamById.get(teamId)?.name || t("teamFallback") : fallback || t("pending");
+  const championName = summary.finalClassification.championTeamId
+    ? nameOf(summary.finalClassification.championTeamId)
+    : null;
   const getManualRank = (groupId: number, teamId: number, fallback: number) =>
     manualRanks[groupId]?.[teamId] || String(fallback);
   const setManualRank = (groupId: number, teamId: number, rank: string) => {
@@ -101,6 +104,16 @@ export function ClassicWorldCupView({
       </TabsList>
 
       <TabsContent value="summary" className="space-y-3">
+        {championName && (
+          <div className="overflow-hidden rounded-lg border border-yellow-400 bg-gradient-to-br from-yellow-100 via-amber-200 to-yellow-500 p-4 text-center shadow-md">
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-900">
+              {t("worldCupChampion")}
+            </p>
+            <p className="mt-1 font-display text-2xl font-black text-amber-950">
+              {championName}
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Card className="p-3">
             <p className="text-xs text-muted-foreground">{t("groups")}</p>
@@ -291,6 +304,16 @@ export function ClassicWorldCupView({
       </TabsContent>
 
       <TabsContent value="finalTable" className="space-y-2">
+        {championName && (
+          <div className="mb-3 overflow-hidden rounded-lg border border-yellow-400 bg-gradient-to-br from-yellow-100 via-amber-200 to-yellow-500 p-4 text-center shadow-md">
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-900">
+              {t("worldCupChampion")}
+            </p>
+            <p className="mt-1 font-display text-2xl font-black text-amber-950">
+              {championName}
+            </p>
+          </div>
+        )}
         {[
           [t("champion"), summary.finalClassification.championTeamId],
           [t("runnerUp"), summary.finalClassification.runnerUpTeamId],
