@@ -274,6 +274,25 @@ const importPlayersSchema = z.object({
     .max(500, "Puedes importar máximo 500 jugadores por archivo"),
 });
 
+const tournamentBackgroundUploadSchema = z.object({
+  imageDataUrl: z
+    .string()
+    .min(1, "La imagen de fondo es requerida")
+    .refine(
+      (value) => /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(value),
+      "El fondo del torneo debe ser una imagen",
+    ),
+  fileSizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(
+      MAX_TOURNAMENT_BACKGROUND_FILE_SIZE_BYTES,
+      "La imagen de fondo del torneo supera el tamaño máximo permitido",
+    )
+    .optional(),
+});
+
 const generateTournamentMatchesSchema = z.object({
   startAt: z.string().datetime("La fecha inicial del calendario es requerida").optional(),
   startDate: z
@@ -343,6 +362,70 @@ function buildRoundRobinPairs(teamIds: number[]) {
   }
 
   return rounds;
+}
+
+function signCloudinaryUpload(
+  params: Record<string, string | number>,
+  apiSecret: string,
+) {
+  const serialized = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join("&");
+  return crypto
+    .createHash("sha1")
+    .update(`${serialized}${apiSecret}`)
+    .digest("hex");
+}
+
+async function uploadImageDataUrlToCloudinary(
+  imageDataUrl: string,
+  folder: string,
+) {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+  if (!cloudName || !apiKey || !apiSecret) {
+    const error = new Error(
+      "El almacenamiento de fondos no está configurado. Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.",
+    ) as Error & { status?: number };
+    error.status = 503;
+    throw error;
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = signCloudinaryUpload({ folder, timestamp }, apiSecret);
+  const uploadForm = new FormData();
+  uploadForm.append("file", imageDataUrl);
+  uploadForm.append("api_key", apiKey);
+  uploadForm.append("timestamp", String(timestamp));
+  uploadForm.append("folder", folder);
+  uploadForm.append("signature", signature);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+    { method: "POST", body: uploadForm },
+  );
+  const responseText = await response.text();
+  let payload: any = {};
+  try {
+    payload = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok || !payload.secure_url) {
+    const error = new Error(
+      payload.error?.message || "No se pudo subir el fondo del torneo",
+    ) as Error & { status?: number };
+    error.status = response.ok ? 502 : response.status;
+    throw error;
+  }
+
+  return {
+    backgroundImageUrl: payload.secure_url as string,
+    fileSizeBytes: payload.bytes ? Number(payload.bytes) : undefined,
+  };
 }
 
 async function establishSession(
@@ -1271,6 +1354,31 @@ export async function registerRoutes(
       resourceType: "image",
       maxFileSizeBytes: MAX_TOURNAMENT_BACKGROUND_FILE_SIZE_BYTES,
     });
+  });
+
+  app.post("/api/tournaments/background", requireTournamentManager, async (req, res) => {
+    try {
+      const input = tournamentBackgroundUploadSchema.parse(req.body);
+      const upload = await uploadImageDataUrlToCloudinary(
+        input.imageDataUrl,
+        "soccer-stats/tournament-backgrounds",
+      );
+      res.status(201).json(upload);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.issues[0].message });
+      }
+      const status = (err as any).status || 500;
+      if (status >= 500) {
+        console.error("Tournament background upload failed", err);
+      }
+      res.status(status).json({
+        message:
+          err instanceof Error
+            ? err.message
+            : "No se pudo subir el fondo del torneo",
+      });
+    }
   });
 
   app.post("/api/tournaments", requireTournamentManager, async (req, res) => {

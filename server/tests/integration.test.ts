@@ -540,6 +540,69 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(createTournament).not.toHaveBeenCalled();
   });
 
+  it('uploads tournament backgrounds through the backend', async () => {
+    const previousCloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const previousApiKey = process.env.CLOUDINARY_API_KEY;
+    const previousApiSecret = process.env.CLOUDINARY_API_SECRET;
+    const previousFetch = globalThis.fetch;
+
+    process.env.CLOUDINARY_CLOUD_NAME = 'demo';
+    process.env.CLOUDINARY_API_KEY = 'api-key';
+    process.env.CLOUDINARY_API_SECRET = 'api-secret';
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({
+        secure_url: 'https://res.cloudinary.com/demo/image/upload/background.png',
+        bytes: 42,
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+    globalThis.fetch = fetchMock as any;
+
+    const res = await request(app)
+      .post('/api/tournaments/background')
+      .send({
+        imageDataUrl: 'data:image/png;base64,aGVsbG8=',
+        fileSizeBytes: 5,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      backgroundImageUrl: 'https://res.cloudinary.com/demo/image/upload/background.png',
+      fileSizeBytes: 42,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.cloudinary.com/v1_1/demo/image/upload',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    if (previousCloudName === undefined) delete process.env.CLOUDINARY_CLOUD_NAME;
+    else process.env.CLOUDINARY_CLOUD_NAME = previousCloudName;
+    if (previousApiKey === undefined) delete process.env.CLOUDINARY_API_KEY;
+    else process.env.CLOUDINARY_API_KEY = previousApiKey;
+    if (previousApiSecret === undefined) delete process.env.CLOUDINARY_API_SECRET;
+    else process.env.CLOUDINARY_API_SECRET = previousApiSecret;
+    globalThis.fetch = previousFetch;
+  });
+
+  it('rejects invalid tournament background uploads before Cloudinary', async () => {
+    const previousFetch = globalThis.fetch;
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as any;
+
+    const res = await request(app)
+      .post('/api/tournaments/background')
+      .send({
+        imageDataUrl: 'data:text/plain;base64,aGVsbG8=',
+        fileSizeBytes: 5,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('imagen');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    globalThis.fetch = previousFetch;
+  });
+
   it('creates a team inside a tournament and enrolls it immediately', async () => {
     const createTeam = vi.spyOn(storage, 'createTeam');
     const enrollTeam = vi.spyOn(storage, 'addTeamToTournament');

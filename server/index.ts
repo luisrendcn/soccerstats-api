@@ -99,13 +99,14 @@ declare module "http" {
 
 app.use(
   express.json({
+    limit: "8mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "8mb" }));
 
 const MemoryStoreClass = MemoryStore(session);
 const sessionSecret = process.env.SESSION_SECRET;

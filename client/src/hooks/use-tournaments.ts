@@ -138,6 +138,11 @@ export interface TournamentBackgroundSignature {
   maxFileSizeBytes: number;
 }
 
+export interface TournamentBackgroundUpload {
+  backgroundImageUrl: string;
+  fileSizeBytes?: number;
+}
+
 export function useTournamentBackgroundSignature() {
   return useMutation({
     mutationFn: async () => {
@@ -150,6 +155,30 @@ export function useTournamentBackgroundSignature() {
         throw new Error(error.message || "Failed to prepare background upload");
       }
       return res.json() as Promise<TournamentBackgroundSignature>;
+    },
+  });
+}
+
+export function useUploadTournamentBackground() {
+  return useMutation({
+    mutationFn: async ({
+      imageDataUrl,
+      fileSizeBytes,
+    }: {
+      imageDataUrl: string;
+      fileSizeBytes: number;
+    }) => {
+      const res = await apiFetch("/api/tournaments/background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageDataUrl, fileSizeBytes }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.message || "Failed to upload tournament background");
+      }
+      return res.json() as Promise<TournamentBackgroundUpload>;
     },
   });
 }

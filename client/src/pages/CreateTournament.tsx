@@ -1,7 +1,7 @@
 import {
   useCreateTournament,
   useTournament,
-  useTournamentBackgroundSignature,
+  useUploadTournamentBackground,
   useUpdateTournament,
 } from "@/hooks/use-tournaments";
 import { useLocation } from "wouter";
@@ -32,7 +32,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
   const { t } = useLanguage();
   const createTournament = useCreateTournament();
   const updateTournament = useUpdateTournament();
-  const backgroundSignature = useTournamentBackgroundSignature();
+  const uploadBackground = useUploadTournamentBackground();
   const { data: existingTournament } = useTournament(tournamentId || 0);
 
   const [formData, setFormData] = useState({
@@ -78,31 +78,45 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
     return () => URL.revokeObjectURL(objectUrl);
   }, [backgroundFile]);
 
+  const getImageMimeType = (file: File) => {
+    if (file.type.startsWith("image/")) return file.type;
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+    if (extension === "png") return "image/png";
+    if (extension === "webp") return "image/webp";
+    return "";
+  };
+
+  const readFileAsDataUrl = (file: File, mimeType: string) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || "");
+        resolve(
+          result.replace(/^data:[^;]*;base64,/, `data:${mimeType};base64,`),
+        );
+      };
+      reader.onerror = () =>
+        reject(new Error(t("tournamentBackgroundUploadError")));
+      reader.readAsDataURL(file);
+    });
+
   const uploadTournamentBackground = async (file: File) => {
-    const signature = await backgroundSignature.mutateAsync();
-    if (file.size > signature.maxFileSizeBytes) {
+    const maxBackgroundSizeBytes = 5 * 1024 * 1024;
+    if (file.size > maxBackgroundSizeBytes) {
       throw new Error(t("tournamentBackgroundTooLarge"));
     }
-    if (!file.type.startsWith("image/")) {
+    const mimeType = getImageMimeType(file);
+    if (!mimeType) {
       throw new Error(t("tournamentBackgroundMustBeImage"));
     }
 
-    const uploadForm = new FormData();
-    uploadForm.append("file", file);
-    uploadForm.append("api_key", signature.apiKey);
-    uploadForm.append("timestamp", String(signature.timestamp));
-    uploadForm.append("folder", signature.folder);
-    uploadForm.append("signature", signature.signature);
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${signature.cloudName}/image/upload`,
-      { method: "POST", body: uploadForm },
-    );
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error?.message || t("tournamentBackgroundUploadError"));
-    }
-    return payload.secure_url as string;
+    const imageDataUrl = await readFileAsDataUrl(file, mimeType);
+    const upload = await uploadBackground.mutateAsync({
+      imageDataUrl,
+      fileSizeBytes: file.size,
+    });
+    return upload.backgroundImageUrl;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -161,7 +175,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
   const isLoading =
     createTournament.isPending ||
     updateTournament.isPending ||
-    backgroundSignature.isPending;
+    uploadBackground.isPending;
   const activeBackgroundPreview =
     backgroundPreviewUrl || formData.backgroundImageUrl;
 
@@ -330,7 +344,7 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {backgroundSignature.isPending
+                  {uploadBackground.isPending
                     ? t("uploadingBackground")
                     : tournamentId
                       ? t("updating")
