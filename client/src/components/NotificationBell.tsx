@@ -13,6 +13,8 @@ import {
   useMarkNotificationRead,
   useNativeNotificationBridge,
   useNotifications,
+  useLocalMatchReminderScheduler,
+  useUpcomingNotifications,
 } from "@/hooks/use-notifications";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/lib/i18n.tsx";
@@ -29,9 +31,11 @@ export function NotificationBell() {
   const { data: auth } = useAuth();
   const enabled = Boolean(auth?.userId);
   const { data: notifications = [] } = useNotifications(enabled);
+  const { data: upcomingNotifications = [] } = useUpcomingNotifications(enabled);
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
   useNativeNotificationBridge(notifications);
+  useLocalMatchReminderScheduler(upcomingNotifications, enabled);
 
   if (!enabled) return null;
 

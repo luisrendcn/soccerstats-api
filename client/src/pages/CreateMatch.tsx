@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n.tsx";
+import { APP_TIME_ZONE } from "@shared/time";
 
 interface CreateMatchProps {
   tournamentId: number;
@@ -79,6 +80,9 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
         homeTeamId: parseInt(homeTeamId),
         awayTeamId: parseInt(awayTeamId),
         date: dateTime,
+        scheduledDate: date,
+        scheduledTime: time,
+        timeZone: APP_TIME_ZONE,
         location: locationName || t("mainField"),
         status,
         streamPlatform: isVideogameTournament ? "twitch" : null,

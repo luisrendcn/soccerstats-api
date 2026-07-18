@@ -110,7 +110,12 @@ export interface IStorage {
   createNotifications(notifications: InsertAppNotification[]): Promise<AppNotification[]>;
   getUserNotifications(
     userId: number,
-    options?: { includeRead?: boolean; limit?: number },
+    options?: {
+      includeFuture?: boolean;
+      includeRead?: boolean;
+      limit?: number;
+      type?: string;
+    },
   ): Promise<AppNotification[]>;
   markNotificationRead(id: number, userId: number): Promise<AppNotification | undefined>;
   markAllNotificationsRead(userId: number): Promise<void>;
@@ -545,14 +550,22 @@ export class DatabaseStorage implements IStorage {
 
   async getUserNotifications(
     userId: number,
-    options: { includeRead?: boolean; limit?: number } = {},
+    options: {
+      includeFuture?: boolean;
+      includeRead?: boolean;
+      limit?: number;
+      type?: string;
+    } = {},
   ): Promise<AppNotification[]> {
-    const conditions = [
-      eq(notifications.userId, userId),
-      lte(notifications.scheduledAt, new Date()),
-    ];
+    const conditions = [eq(notifications.userId, userId)];
+    if (!options.includeFuture) {
+      conditions.push(lte(notifications.scheduledAt, new Date()));
+    }
     if (!options.includeRead) {
       conditions.push(isNull(notifications.readAt));
+    }
+    if (options.type) {
+      conditions.push(eq(notifications.type, options.type));
     }
 
     return db

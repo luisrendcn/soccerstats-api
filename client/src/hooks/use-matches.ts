@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl, type InsertMatch, type InsertGoal } from "@shared/routes";
 import { apiFetch } from "@/lib/api";
 import { refreshAppData } from "@/lib/queryClient";
+import { APP_TIME_ZONE } from "@shared/time";
 import {
   invalidateOptimisticQueries,
   patchArrayItemById,
@@ -58,10 +59,17 @@ export function useMatch(id: number) {
 export function useCreateMatch() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertMatch) => {
+    mutationFn: async (
+      data: InsertMatch & {
+        scheduledDate?: string;
+        scheduledTime?: string;
+        timeZone?: string;
+      },
+    ) => {
       // Ensure dates are strings for JSON serialization if they aren't already
       const payload = {
         ...data,
+        timeZone: data.timeZone || APP_TIME_ZONE,
         date: new Date(data.date).toISOString() // Serialize date
       };
       

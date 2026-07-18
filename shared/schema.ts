@@ -2,6 +2,7 @@ import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { APP_TIME_ZONE } from "./time";
 
 export const teams = pgTable("teams", {
   id: serial("id").primaryKey(),
@@ -296,12 +297,21 @@ const streamUrlSchema = z
   }, "Pega un enlace válido de Twitch");
 
 export const matchStatusSchema = z.enum(["scheduled", "live", "finished"]);
+export const localDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha del partido no es válida");
+export const localTimeSchema = z
+  .string()
+  .regex(/^\d{2}:\d{2}$/, "La hora del partido no es válida");
 
 export const createMatchSchema = insertMatchSchema.extend({
   status: matchStatusSchema.default("scheduled"),
   streamPlatform: z.enum(["twitch"]).optional().nullable(),
   streamChannel: twitchChannelSchema.optional().nullable(),
   streamUrl: streamUrlSchema.optional().nullable(),
+  scheduledDate: localDateSchema.optional(),
+  scheduledTime: localTimeSchema.optional(),
+  timeZone: z.string().trim().min(1).max(64).default(APP_TIME_ZONE).optional(),
 });
 
 export const updateMatchSchema = createMatchSchema.partial();

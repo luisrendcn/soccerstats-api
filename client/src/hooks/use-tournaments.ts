@@ -286,18 +286,31 @@ export function useGenerateTournamentMatches() {
     mutationFn: async ({
       tournamentId,
       startAt,
+      startDate,
+      startTime,
+      timeZone,
       intervalDays,
       location,
     }: {
       tournamentId: number;
-      startAt: string;
+      startAt?: string;
+      startDate?: string;
+      startTime?: string;
+      timeZone?: string;
       intervalDays: number;
       location?: string | null;
     }) => {
       const res = await apiFetch(`/api/tournaments/${tournamentId}/matches/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startAt, intervalDays, location }),
+        body: JSON.stringify({
+          startAt,
+          startDate,
+          startTime,
+          timeZone,
+          intervalDays,
+          location,
+        }),
         credentials: "include",
       });
       if (!res.ok) {

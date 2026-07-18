@@ -2,8 +2,13 @@ import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AppNotification } from "@shared/schema";
 import { apiFetch } from "@/lib/api";
+import {
+  areAppNotificationsEnabled,
+  scheduleLocalMatchReminders,
+} from "@/lib/native-notifications";
 
 const notificationsKey = ["notifications"] as const;
+const upcomingNotificationsKey = ["notifications", "upcoming"] as const;
 
 export function useNotifications(enabled = true) {
   return useQuery({
@@ -22,6 +27,28 @@ export function useNotifications(enabled = true) {
     },
     enabled,
     refetchInterval: enabled ? 20_000 : false,
+    retry: false,
+  });
+}
+
+export function useUpcomingNotifications(enabled = true) {
+  return useQuery({
+    queryKey: upcomingNotificationsKey,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        includeFuture: "true",
+        limit: "100",
+        type: "match_reminder",
+      });
+      const res = await apiFetch(`/api/notifications?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (res.status === 401 || res.status === 403) return [];
+      if (!res.ok) throw new Error("Failed to fetch upcoming notifications");
+      return res.json() as Promise<AppNotification[]>;
+    },
+    enabled,
+    refetchInterval: enabled ? 5 * 60_000 : false,
     retry: false,
   });
 }
@@ -74,7 +101,7 @@ export function useNativeNotificationBridge(
 ) {
   useEffect(() => {
     if (typeof window === "undefined" || !notifications?.length) return;
-    if (localStorage.getItem("notifications") !== "true") return;
+    if (!areAppNotificationsEnabled()) return;
     if (!("Notification" in window) || Notification.permission !== "granted") {
       return;
     }
@@ -98,4 +125,14 @@ export function useNativeNotificationBridge(
       localStorage.setItem(storageKey, JSON.stringify([...shown].slice(-100)));
     }
   }, [notifications]);
+}
+
+export function useLocalMatchReminderScheduler(
+  notifications: AppNotification[] | undefined,
+  enabled = true,
+) {
+  useEffect(() => {
+    if (!enabled) return;
+    void scheduleLocalMatchReminders(notifications || []);
+  }, [enabled, notifications]);
 }

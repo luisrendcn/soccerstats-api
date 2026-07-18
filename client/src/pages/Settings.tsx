@@ -6,6 +6,12 @@ import { useLanguage } from "@/lib/i18n.tsx";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import {
+  areAppNotificationsEnabled,
+  cancelScheduledLocalReminders,
+  requestAppNotificationPermission,
+  setAppNotificationsEnabled,
+} from "@/lib/native-notifications";
 
 export default function Settings() {
   const { t } = useLanguage();
@@ -23,33 +29,28 @@ export default function Settings() {
   }, [compact]);
 
   const [notifications, setNotifications] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("notifications") === "true";
+    return areAppNotificationsEnabled();
   });
   useEffect(() => {
-    localStorage.setItem("notifications", notifications.toString());
+    setAppNotificationsEnabled(notifications);
   }, [notifications]);
 
   const handleNotificationsChange = async (enabled: boolean) => {
     if (!enabled) {
       setNotifications(false);
+      void cancelScheduledLocalReminders();
       return;
     }
 
-    if (typeof window !== "undefined" && "Notification" in window) {
-      const permission =
-        Notification.permission === "default"
-          ? await Notification.requestPermission()
-          : Notification.permission;
-      if (permission === "denied") {
-        toast({
-          variant: "destructive",
-          title: t("notifications"),
-          description: t("notificationPermissionDenied"),
-        });
-        setNotifications(false);
-        return;
-      }
+    const allowed = await requestAppNotificationPermission();
+    if (!allowed) {
+      toast({
+        variant: "destructive",
+        title: t("notifications"),
+        description: t("notificationPermissionDenied"),
+      });
+      setNotifications(false);
+      return;
     }
 
     setNotifications(true);
@@ -59,9 +60,10 @@ export default function Settings() {
     setDark(false);
     setCompact(false);
     setNotifications(false);
+    void cancelScheduledLocalReminders();
     localStorage.removeItem("theme");
     localStorage.removeItem("compact");
-    localStorage.removeItem("notifications");
+    setAppNotificationsEnabled(false);
   };
 
   return (

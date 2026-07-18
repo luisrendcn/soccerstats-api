@@ -24,6 +24,10 @@ import {
 } from "@shared/schema";
 import { z } from "zod/v4";
 import { normalizeTeamColor, supportedTeamColorNames } from "@shared/team-colors";
+import {
+  APP_TIME_ZONE,
+  zonedLocalDateTimeToUtcDate,
+} from "@shared/time";
 
 const userRoleSchema = z.enum([
   "admin",
@@ -260,10 +264,49 @@ const importPlayersSchema = z.object({
 });
 
 const generateTournamentMatchesSchema = z.object({
-  startAt: z.string().datetime("La fecha inicial del calendario es requerida"),
+  startAt: z.string().datetime("La fecha inicial del calendario es requerida").optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha inicial del calendario no es válida")
+    .optional(),
+  startTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, "La hora inicial del calendario no es válida")
+    .optional(),
+  timeZone: z.string().trim().min(1).max(64).default(APP_TIME_ZONE).optional(),
   intervalDays: z.number().int().min(0).max(30).default(7),
   location: z.string().trim().max(120).optional().nullable(),
+}).superRefine((input, ctx) => {
+  if (input.startAt || (input.startDate && input.startTime)) return;
+  ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    message: "La fecha y hora inicial del calendario son requeridas",
+    path: ["startDate"],
+  });
 });
+
+function normalizeScheduledDateFields(rawBody: Record<string, unknown>) {
+  if (
+    typeof rawBody.scheduledDate === "string" &&
+    typeof rawBody.scheduledTime === "string"
+  ) {
+    rawBody.date = zonedLocalDateTimeToUtcDate(
+      rawBody.scheduledDate,
+      rawBody.scheduledTime,
+      typeof rawBody.timeZone === "string" ? rawBody.timeZone : APP_TIME_ZONE,
+    );
+    return;
+  }
+
+  if (typeof rawBody.date === "string") {
+    rawBody.date = new Date(rawBody.date);
+  }
+}
+
+function stripScheduleRequestFields<T extends Record<string, unknown>>(input: T) {
+  const { scheduledDate, scheduledTime, timeZone, ...matchInput } = input;
+  return matchInput;
+}
 
 function normalizeName(value: string) {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
@@ -559,11 +602,13 @@ export async function registerRoutes(
   });
 
   app.get("/api/notifications", requireActiveSession, async (req, res) => {
+    const includeFuture = req.query.includeFuture === "true";
     const includeRead = req.query.includeRead === "true";
     const limit = Number(req.query.limit || 30);
+    const type = typeof req.query.type === "string" ? req.query.type : undefined;
     const notifications = await storage.getUserNotifications(
       (req.session as any).userId,
-      { includeRead, limit },
+      { includeFuture, includeRead, limit, type },
     );
     res.json(notifications);
   });
@@ -1321,7 +1366,14 @@ export async function registerRoutes(
 
       const teamById = new Map(tournamentTeams.map((team) => [team.id, team]));
       const rounds = buildRoundRobinPairs(tournamentTeams.map((team) => team.id));
-      const startAt = new Date(input.startAt);
+      const startAt =
+        input.startDate && input.startTime
+          ? zonedLocalDateTimeToUtcDate(
+              input.startDate,
+              input.startTime,
+              input.timeZone || APP_TIME_ZONE,
+            )
+          : new Date(input.startAt!);
       const createdMatches = [];
 
       for (const [roundIndex, round] of rounds.entries()) {
@@ -1542,11 +1594,8 @@ export async function registerRoutes(
 
   app.post(api.matches.create.path, requirePermission("matches", "create"), async (req, res) => {
     try {
-      // Coerce `date` string to Date before parsing/validation
       const rawBody = { ...req.body };
-      if (typeof rawBody.date === "string") {
-        rawBody.date = new Date(rawBody.date);
-      }
+      normalizeScheduledDateFields(rawBody);
 
       const input = api.matches.create.input.parse(
         normalizeMatchStreamFields(rawBody),
@@ -1577,7 +1626,7 @@ export async function registerRoutes(
         });
       }
 
-      const matchInput = { ...input };
+      const matchInput = stripScheduleRequestFields({ ...input });
       if (tournament.tournamentType === "videogame") {
         const homeTournamentTeam = tournamentTeams.find(
           (team) => team.id === input.homeTeamId,
@@ -1653,15 +1702,13 @@ export async function registerRoutes(
   app.put(api.matches.update.path, requirePermission("matches", "update"), async (req, res) => {
     try {
       const matchId = Number(req.params.id);
-      // Coerce `date` string to Date before parsing/validation (partial schema)
       const rawBody = { ...req.body };
-      if (typeof rawBody.date === "string") {
-        rawBody.date = new Date(rawBody.date);
-      }
+      normalizeScheduledDateFields(rawBody);
 
       const input = api.matches.update.input.parse(
         normalizeMatchStreamFields(rawBody),
       );
+      const matchUpdate = stripScheduleRequestFields({ ...input });
       const existingMatch = await storage.getMatch(matchId);
       if (!existingMatch) {
         return res.status(404).json({ message: "Match not found" });
@@ -1679,13 +1726,13 @@ export async function registerRoutes(
         );
         if (!tournament) return;
       }
-      const match = await storage.updateMatch(matchId, input);
-      if (input.date || input.status === "scheduled") {
+      const match = await storage.updateMatch(matchId, matchUpdate);
+      if (matchUpdate.date || matchUpdate.status === "scheduled") {
         void scheduleMatchReminder(match);
       }
-      if (input.status && input.status !== existingMatch.status) {
-        if (input.status === "live" || input.status === "finished") {
-          void notifyMatchStatus(match, input.status);
+      if (matchUpdate.status && matchUpdate.status !== existingMatch.status) {
+        if (matchUpdate.status === "live" || matchUpdate.status === "finished") {
+          void notifyMatchStatus(match, matchUpdate.status);
         }
       }
       res.json(match);

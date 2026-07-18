@@ -292,8 +292,10 @@ describe('Integration: basic endpoints (mocked storage)', () => {
       readAt: null,
     });
     expect(getNotifications).toHaveBeenCalledWith(1, {
+      includeFuture: false,
       includeRead: false,
       limit: 30,
+      type: undefined,
     });
   });
 

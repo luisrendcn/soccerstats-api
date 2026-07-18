@@ -45,6 +45,7 @@ import { Label } from "@/components/ui/label";
 import StandingsTable from "@/components/ui/StandingTable";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { parseTeamImportFile } from "@/lib/spreadsheet-import";
+import { APP_TIME_ZONE, zonedLocalDateTimeToUtcIso } from "@shared/time";
 
 interface TournamentDetailsProps {
   tournamentId: number;
@@ -230,10 +231,17 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
     }
 
     try {
-      const startAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
+      const startAt = zonedLocalDateTimeToUtcIso(
+        scheduleDate,
+        scheduleTime,
+        APP_TIME_ZONE,
+      );
       const result = await generateMatches.mutateAsync({
         tournamentId,
         startAt,
+        startDate: scheduleDate,
+        startTime: scheduleTime,
+        timeZone: APP_TIME_ZONE,
         intervalDays: Number(scheduleIntervalDays) || 7,
         location: scheduleLocation.trim() || null,
       });
