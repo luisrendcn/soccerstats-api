@@ -15,6 +15,7 @@ import {
   isTwitchStreamVisible,
   TwitchStreamCard,
 } from "@/components/TwitchStreamCard";
+import { PressHelp } from "@/components/PressHelp";
 
 export default function Matches() {
   const { t } = useLanguage();
@@ -83,14 +84,12 @@ export default function Matches() {
     <Layout title={t('matchSchedule')}>
       <div className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h2 className="flex items-center gap-2 font-display text-lg font-bold">
               <Radio className="h-5 w-5 text-red-500" />
               {t("liveMatches")}
+              <PressHelp text={t("liveMatchesDescription")} />
             </h2>
-            <p className="text-sm text-muted-foreground">
-              {t("liveMatchesDescription")}
-            </p>
           </div>
           <span className="rounded-full bg-background px-3 py-1 text-xs font-bold text-primary shadow-sm">
             {liveMatches.length}

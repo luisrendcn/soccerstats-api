@@ -809,6 +809,11 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  app.delete("/api/notifications", requireActiveSession, async (req, res) => {
+    await storage.clearNotificationPanel((req.session as any).userId);
+    res.json({ success: true });
+  });
+
   app.get("/api/bootstrap", async (_req, res) => {
     const [teams, matches, tournaments] = await Promise.all([
       storage.getTeams(),

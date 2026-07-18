@@ -23,34 +23,47 @@ export default function StandingsTable({ title, tournamentId }: StandingTablePro
   }
 
   return (
-    <div className="overflow-x-auto mt-6">
+    <div className="mt-6 w-full overflow-hidden">
       {title && <h3 className="text-lg font-display mb-2">{title}</h3>}
-      <table className="min-w-full border rounded-lg">
+      <table className="w-full table-fixed overflow-hidden rounded-lg border text-[10px] sm:text-xs">
+        <colgroup>
+          <col className="w-[30%]" />
+          <col className="w-[8.75%]" />
+          <col className="w-[8.75%]" />
+          <col className="w-[8.75%]" />
+          <col className="w-[8.75%]" />
+          <col className="w-[8.75%]" />
+          <col className="w-[8.75%]" />
+          <col className="w-[8.75%]" />
+          <col className="w-[8.75%]" />
+        </colgroup>
         <thead className="bg-gray-100">
           <tr>
-            <th className="px-3 py-2 text-left">{t("teamsTitle")}</th>
-            <th className="px-3 py-2 text-center">PJ</th>
-            <th className="px-3 py-2 text-center">PG</th>
-            <th className="px-3 py-2 text-center">PE</th>
-            <th className="px-3 py-2 text-center">PP</th>
-            <th className="px-3 py-2 text-center">GF</th>
-            <th className="px-3 py-2 text-center">GC</th>
-            <th className="px-3 py-2 text-center">DG</th>
-            <th className="px-3 py-2 text-center font-semibold">Pts</th>
+            <th className="px-1.5 py-2 text-left">{t("teamsTitle")}</th>
+            <th className="px-0.5 py-2 text-center">PJ</th>
+            <th className="px-0.5 py-2 text-center">PG</th>
+            <th className="px-0.5 py-2 text-center">PE</th>
+            <th className="px-0.5 py-2 text-center">PP</th>
+            <th className="px-0.5 py-2 text-center">GF</th>
+            <th className="px-0.5 py-2 text-center">GC</th>
+            <th className="px-0.5 py-2 text-center">DG</th>
+            <th className="px-0.5 py-2 text-center font-semibold">Pts</th>
           </tr>
         </thead>
         <tbody>
           {standings.map((team) => (
             <tr key={team.teamId} className="border-t">
-              <td className="px-3 py-2">{team.teamName}</td>
-              <td className="px-3 py-2 text-center">{team.played}</td>
-              <td className="px-3 py-2 text-center">{team.wins}</td>
-              <td className="px-3 py-2 text-center">{team.draws}</td>
-              <td className="px-3 py-2 text-center">{team.losses}</td>
-              <td className="px-3 py-2 text-center">{team.goalsFor}</td>
-              <td className="px-3 py-2 text-center">{team.goalsAgainst}</td>
-              <td className="px-3 py-2 text-center">{team.goalDifference}</td>
-              <td className="px-3 py-2 text-center font-bold">
+              <td className="truncate px-1.5 py-2 font-medium" title={team.teamName}>
+                {team.teamName}
+              </td>
+              <td className="px-0.5 py-2 text-center tabular-nums">{team.played}</td>
+              <td className="px-0.5 py-2 text-center tabular-nums">{team.wins}</td>
+              <td className="px-0.5 py-2 text-center tabular-nums">{team.draws}</td>
+              <td className="px-0.5 py-2 text-center tabular-nums">{team.losses}</td>
+              <td className="px-0.5 py-2 text-center tabular-nums">{team.goalsFor}</td>
+              <td className="px-0.5 py-2 text-center tabular-nums">{team.goalsAgainst}</td>
+              <td className="px-0.5 py-2 text-center tabular-nums">{team.goalDifference}</td>
+              <td className="px-0.5 py-2 text-center font-bold tabular-nums">
                 {team.points}
               </td>
             </tr>

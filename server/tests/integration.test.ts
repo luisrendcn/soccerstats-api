@@ -180,6 +180,7 @@ vi.mock('../storage', () => {
       createdAt: new Date(),
     }),
     markAllNotificationsRead: async () => {},
+    clearNotificationPanel: async () => {},
     deleteNotificationsForEntity: async () => {},
     getTournaments: async () => [],
     getTournamentById: async (id: number) => ({

@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Bell, CheckCheck } from "lucide-react";
+import { Bell, CheckCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
+  useClearNotificationPanel,
   useNativeNotificationBridge,
   useNotifications,
   useLocalMatchReminderScheduler,
@@ -34,6 +35,7 @@ export function NotificationBell() {
   const { data: upcomingNotifications = [] } = useUpcomingNotifications(enabled);
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
+  const clearPanel = useClearNotificationPanel();
   useNativeNotificationBridge(notifications);
   useLocalMatchReminderScheduler(upcomingNotifications, enabled);
 
@@ -56,22 +58,34 @@ export function NotificationBell() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
+      <PopoverContent align="end" className="w-[calc(100vw-2rem)] max-w-sm p-0">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <h2 className="font-semibold">{t("notifications")}</h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 gap-1 px-2 text-xs"
-            disabled={!unread.length || markAllRead.isPending}
-            onClick={() => markAllRead.mutate()}
-          >
-            <CheckCheck className="h-3.5 w-3.5" />
-            {t("markAllRead")}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              title={t("markAllRead")}
+              disabled={!unread.length || markAllRead.isPending}
+              onClick={() => markAllRead.mutate()}
+            >
+              <CheckCheck className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              title={t("clearNotifications")}
+              disabled={!notifications.length || clearPanel.isPending}
+              onClick={() => clearPanel.mutate()}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
 
-        <ScrollArea className="max-h-96">
+        <ScrollArea className="h-96 max-h-[70vh]">
           <div className="divide-y divide-border">
             {notifications.length ? (
               notifications.map((notification) => {

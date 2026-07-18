@@ -129,6 +129,7 @@ export interface IStorage {
   ): Promise<AppNotification[]>;
   markNotificationRead(id: number, userId: number): Promise<AppNotification | undefined>;
   markAllNotificationsRead(userId: number): Promise<void>;
+  clearNotificationPanel(userId: number): Promise<void>;
   deleteNotificationsForEntity(
     entityType: string,
     entityId: number,
@@ -672,6 +673,17 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(notifications.userId, userId),
           isNull(notifications.readAt),
+          lte(notifications.scheduledAt, new Date()),
+        ),
+      );
+  }
+
+  async clearNotificationPanel(userId: number): Promise<void> {
+    await db
+      .delete(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
           lte(notifications.scheduledAt, new Date()),
         ),
       );

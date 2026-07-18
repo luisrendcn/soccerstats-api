@@ -62,6 +62,7 @@ import StandingsTable from "@/components/ui/StandingTable";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { parseTeamImportFile } from "@/lib/spreadsheet-import";
 import { APP_TIME_ZONE, zonedLocalDateTimeToUtcIso } from "@shared/time";
+import { PressHelp } from "@/components/PressHelp";
 
 interface TournamentDetailsProps {
   tournamentId: number;
@@ -449,10 +450,8 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                     <div className="flex items-center gap-2 font-display text-lg font-bold">
                       <Radio className="h-5 w-5 text-red-500" />
                       {t("liveMatches")}
+                      <PressHelp text={t("liveMatchesDescription")} />
                     </div>
-                    <p className="mt-1 text-sm font-normal text-muted-foreground">
-                      {t("liveMatchesDescription")}
-                    </p>
                   </div>
                   <Badge className="bg-background text-primary shadow-sm">
                     {liveMatches.length}
@@ -737,7 +736,10 @@ export default function TournamentDetails({ tournamentId }: TournamentDetailsPro
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="schedule-interval">{t("intervalDays")}</Label>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="schedule-interval">{t("intervalDays")}</Label>
+                          <PressHelp text={t("intervalDaysHelp")} />
+                        </div>
                         <Input
                           id="schedule-interval"
                           type="number"

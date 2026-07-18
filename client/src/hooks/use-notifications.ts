@@ -16,7 +16,7 @@ export function useNotifications(enabled = true) {
     queryFn: async () => {
       const params = new URLSearchParams({
         includeRead: "true",
-        limit: "30",
+        limit: "100",
       });
       const res = await apiFetch(`/api/notifications?${params.toString()}`, {
         credentials: "include",
@@ -92,6 +92,23 @@ export function useMarkAllNotificationsRead() {
           readAt: item.readAt || new Date(),
         })),
       );
+    },
+  });
+}
+
+export function useClearNotificationPanel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch("/api/notifications", {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to clear notifications");
+      return res.json() as Promise<{ success: boolean }>;
+    },
+    onSuccess: () => {
+      queryClient.setQueryData<AppNotification[]>(notificationsKey, []);
     },
   });
 }

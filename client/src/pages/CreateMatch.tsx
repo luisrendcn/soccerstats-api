@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n.tsx";
 import { APP_TIME_ZONE } from "@shared/time";
+import { PressHelp } from "@/components/PressHelp";
 
 interface CreateMatchProps {
   tournamentId: number;
@@ -194,7 +195,10 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
 
           {isVideogameTournament && (
             <div className="space-y-2">
-              <Label>{t("broadcastChannel")}</Label>
+              <div className="flex items-center gap-2">
+                <Label>{t("broadcastChannel")}</Label>
+                <PressHelp text={t("channelsFromVideogameParticipants")} />
+              </div>
               <Select
                 value={streamChannel}
                 onValueChange={setStreamChannel}
@@ -215,16 +219,14 @@ export default function CreateMatch({ tournamentId }: CreateMatchProps) {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                {t("channelsFromVideogameParticipants")}
-              </p>
             </div>
           )}
 
           {!isVideogameTournament && (
-            <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-              {t("twitchEnabledForVideogameTournaments")}
-            </p>
+            <div className="flex items-center gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
+              <span>{t("twitchStreams")}</span>
+              <PressHelp text={t("twitchEnabledForVideogameTournaments")} />
+            </div>
           )}
         </div>
 
