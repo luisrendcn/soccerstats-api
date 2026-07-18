@@ -2078,6 +2078,7 @@ export async function registerRoutes(
       if (!existingMatch) {
         return res.status(404).json({ message: "Match not found" });
       }
+      let existingTournament: Tournament | undefined;
       if ((req.session as any).userRole === "tournament_manager") {
         if (!existingMatch.tournamentId) {
           return res.status(403).json({
@@ -2090,6 +2091,46 @@ export async function registerRoutes(
           existingMatch.tournamentId,
         );
         if (!tournament) return;
+        existingTournament = tournament;
+      } else if (existingMatch.tournamentId) {
+        existingTournament =
+          (await storage.getTournamentById(existingMatch.tournamentId)) ||
+          undefined;
+      }
+      if (
+        existingTournament?.tournamentType === "videogame" &&
+        (matchUpdate.status === "live" ||
+          matchUpdate.streamChannel !== undefined ||
+          matchUpdate.streamUrl !== undefined)
+      ) {
+        const tournamentTeams = await storage.getTournamentTeams(
+          existingTournament.id,
+        );
+        const homeTournamentTeam = tournamentTeams.find(
+          (team) => team.id === existingMatch.homeTeamId,
+        );
+        const awayTournamentTeam = tournamentTeams.find(
+          (team) => team.id === existingMatch.awayTeamId,
+        );
+        const allowedChannels = [
+          homeTournamentTeam?.twitchChannel,
+          awayTournamentTeam?.twitchChannel,
+        ].filter(isValidTwitchChannel);
+        const requestedChannel = normalizeTwitchChannel(
+          matchUpdate.streamChannel ||
+            matchUpdate.streamUrl ||
+            existingMatch.streamChannel ||
+            existingMatch.streamUrl,
+        );
+        if (!requestedChannel || !allowedChannels.includes(requestedChannel)) {
+          return res.status(400).json({
+            message:
+              "El canal en vivo debe pertenecer a uno de los equipos del partido",
+          });
+        }
+        matchUpdate.streamPlatform = "twitch";
+        matchUpdate.streamChannel = requestedChannel;
+        matchUpdate.streamUrl = buildTwitchUrl(requestedChannel);
       }
       const match = await storage.updateMatch(matchId, matchUpdate);
       if (matchUpdate.date || matchUpdate.status === "scheduled") {

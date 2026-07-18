@@ -9,7 +9,7 @@ import {
   useUpdateMatchHighlight,
 } from "@/hooks/use-highlights";
 import { useTeam, useTeamPlayers } from "@/hooks/use-teams";
-import { useTournament } from "@/hooks/use-tournaments";
+import { useTournament, useTournamentTeams } from "@/hooks/use-tournaments";
 import { Layout } from "@/components/Layout";
 import { TeamColorCircleLarge } from "@/components/TeamColor";
 import { TwitchStreamCard, getTwitchChannelFromMatch } from "@/components/TwitchStreamCard";
@@ -169,6 +169,7 @@ export default function MatchDetails() {
   const { data: homeTeam } = useTeam(match?.homeTeamId || 0);
   const { data: awayTeam } = useTeam(match?.awayTeamId || 0);
   const { data: tournament } = useTournament(match?.tournamentId || 0);
+  const { data: tournamentTeams } = useTournamentTeams(match?.tournamentId || 0);
   
   const { data: homePlayersResp } = useTeamPlayers(match?.homeTeamId || 0);
   const { data: awayPlayersResp } = useTeamPlayers(match?.awayTeamId || 0);
@@ -198,6 +199,8 @@ export default function MatchDetails() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("unknown");
   const [goalMinute, setGoalMinute] = useState("");
   const [isGoalDialogOpen, setIsGoalDialogOpen] = useState(false);
+  const [isLiveDialogOpen, setIsLiveDialogOpen] = useState(false);
+  const [selectedLiveChannel, setSelectedLiveChannel] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [isHighlightDialogOpen, setIsHighlightDialogOpen] = useState(false);
   const [editingHighlight, setEditingHighlight] =
@@ -228,7 +231,8 @@ export default function MatchDetails() {
   const isLoading = matchLoading || goalsLoading || !match || !homeTeam || !awayTeam;
   const isFinished = match?.status === "finished";
   const isLive = match?.status === "live";
-  const hasTwitchStream = match ? Boolean(getTwitchChannelFromMatch(match)) : false;
+  const currentTwitchChannel = match ? getTwitchChannelFromMatch(match) : null;
+  const hasTwitchStream = Boolean(currentTwitchChannel);
   const currentOptimisticScore =
     optimisticScore?.matchId === match?.id ? optimisticScore : null;
   const displayedHomeScore =
@@ -249,6 +253,27 @@ export default function MatchDetails() {
   const highlightTeamPlayers = allPlayers.filter(
     (player) => String(player.teamId) === highlightTeamId,
   );
+  const homeTournamentTeam = tournamentTeams?.find(
+    (team) => team.id === match?.homeTeamId,
+  );
+  const awayTournamentTeam = tournamentTeams?.find(
+    (team) => team.id === match?.awayTeamId,
+  );
+  const liveBroadcastOptions = [
+    homeTournamentTeam && {
+      teamName: homeTeam?.name || t("localTeam"),
+      channel: homeTournamentTeam.twitchChannel,
+    },
+    awayTournamentTeam && {
+      teamName: awayTeam?.name || t("awayTeamLabel"),
+      channel: awayTournamentTeam.twitchChannel,
+    },
+  ].filter(
+    (option): option is { teamName: string; channel: string } =>
+      Boolean(option?.channel),
+  );
+  const canSelectLiveBroadcast =
+    liveBroadcastOptions.length > 0 || hasTwitchStream;
 
   useEffect(() => {
     if (!match) return;
@@ -324,10 +349,31 @@ export default function MatchDetails() {
     }
   };
 
+  const openLiveDialog = () => {
+    const preferredChannel =
+      (currentTwitchChannel &&
+        liveBroadcastOptions.some(
+          (option) => option.channel === currentTwitchChannel,
+        ) &&
+        currentTwitchChannel) ||
+      liveBroadcastOptions[0]?.channel ||
+      currentTwitchChannel ||
+      "";
+    setSelectedLiveChannel(preferredChannel);
+    setIsLiveDialogOpen(true);
+  };
+
   const handleStartLive = async () => {
-    if (!match) return;
+    if (!match || !selectedLiveChannel) return;
     try {
-      await updateMatch.mutateAsync({ id: match.id, status: "live" });
+      await updateMatch.mutateAsync({
+        id: match.id,
+        status: "live",
+        streamPlatform: "twitch",
+        streamChannel: selectedLiveChannel,
+        streamUrl: `https://www.twitch.tv/${selectedLiveChannel}`,
+      });
+      setIsLiveDialogOpen(false);
       toast({
         title: t("matchMarkedLive"),
         description: t("matchMarkedLiveDescription"),
@@ -645,8 +691,8 @@ export default function MatchDetails() {
               <Button variant="outline" className="w-full" onClick={handleFinishMatch} disabled={updateMatch.isPending}>
                 {t("endMatch")}
               </Button>
-              {!isLive && hasTwitchStream && (
-                <Button type="button" variant="secondary" className="w-full" onClick={handleStartLive} disabled={updateMatch.isPending}>
+              {!isLive && canSelectLiveBroadcast && (
+                <Button type="button" variant="secondary" className="w-full" onClick={openLiveDialog} disabled={updateMatch.isPending}>
                   {t("markLive")}
                 </Button>
               )}
@@ -668,6 +714,58 @@ export default function MatchDetails() {
           />
         </div>
       )}
+
+      <Dialog open={isLiveDialogOpen} onOpenChange={setIsLiveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("selectLiveBroadcastChannel")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {t("selectLiveBroadcastChannelDescription")}
+            </p>
+            <div className="space-y-2">
+              <Label>{t("broadcastChannel")}</Label>
+              <Select
+                value={selectedLiveChannel}
+                onValueChange={setSelectedLiveChannel}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t("selectTwitchChannel")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {liveBroadcastOptions.map((option) => (
+                    <SelectItem key={option.channel} value={option.channel}>
+                      {option.teamName} - @{option.channel}
+                    </SelectItem>
+                  ))}
+                  {currentTwitchChannel &&
+                    !liveBroadcastOptions.some(
+                      (option) => option.channel === currentTwitchChannel,
+                    ) && (
+                      <SelectItem value={currentTwitchChannel}>
+                        {t("currentBroadcastChannel")} - @{currentTwitchChannel}
+                      </SelectItem>
+                    )}
+                </SelectContent>
+              </Select>
+            </div>
+            {liveBroadcastOptions.length === 0 && !currentTwitchChannel && (
+              <p className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
+                {t("liveBroadcastChannelsMissing")}
+              </p>
+            )}
+            <Button
+              type="button"
+              className="w-full"
+              onClick={handleStartLive}
+              disabled={updateMatch.isPending || !selectedLiveChannel}
+            >
+              {updateMatch.isPending ? t("loading") : t("markLive")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Match Events */}
       <div className="space-y-4">
