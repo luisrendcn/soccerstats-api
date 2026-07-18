@@ -522,6 +522,24 @@ describe('Integration: basic endpoints (mocked storage)', () => {
     expect(res.body.map((match: any) => match.id)).toEqual([1, 3]);
   });
 
+  it('rejects tournament backgrounds from outside Cloudinary', async () => {
+    const createTournament = vi.spyOn(storage, 'createTournament');
+    createTournament.mockClear();
+
+    const res = await request(app)
+      .post('/api/tournaments')
+      .send({
+        name: 'City Cup',
+        tournamentType: 'soccer',
+        startDate: new Date().toISOString(),
+        backgroundImageUrl: 'https://example.com/background.jpg',
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('Cloudinary');
+    expect(createTournament).not.toHaveBeenCalled();
+  });
+
   it('creates a team inside a tournament and enrolls it immediately', async () => {
     const createTeam = vi.spyOn(storage, 'createTeam');
     const enrollTeam = vi.spyOn(storage, 'addTeamToTournament');

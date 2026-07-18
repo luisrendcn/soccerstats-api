@@ -49,9 +49,20 @@ const normalizeStoredUserRole = (role: string) =>
 const isTeamCaptainRole = (role: string) =>
   role === "team_captain" || role === "team";
 
+const isCloudinaryImageUrl = (value?: string | null) => {
+  if (!value) return true;
+  try {
+    return new URL(value).hostname === "res.cloudinary.com";
+  } catch {
+    return false;
+  }
+};
+
 const MAX_HIGHLIGHT_MINUTE = Number(process.env.MATCH_MAX_MINUTE || 130);
 const MAX_HIGHLIGHT_THUMBNAIL_FILE_SIZE_BYTES =
   Number(process.env.HIGHLIGHT_THUMBNAIL_MAX_FILE_SIZE_MB || 5) * 1024 * 1024;
+const MAX_TOURNAMENT_BACKGROUND_FILE_SIZE_BYTES =
+  Number(process.env.TOURNAMENT_BACKGROUND_MAX_FILE_SIZE_MB || 5) * 1024 * 1024;
 const TWITCH_STREAM_GRACE_MS = 60 * 60 * 1000;
 const twitchTokenCache: { token: string | null; expiresAt: number } = {
   token: null,
@@ -1233,10 +1244,44 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/tournaments/background-signature", requireTournamentManager, async (_req, res) => {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    if (!cloudName || !apiKey || !apiSecret) {
+      return res.status(503).json({
+        message:
+          "El almacenamiento de fondos no está configurado. Define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET.",
+      });
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const folder = "soccer-stats/tournament-backgrounds";
+    const signature = crypto
+      .createHash("sha1")
+      .update(`folder=${folder}&timestamp=${timestamp}${apiSecret}`)
+      .digest("hex");
+
+    res.json({
+      cloudName,
+      apiKey,
+      timestamp,
+      folder,
+      signature,
+      resourceType: "image",
+      maxFileSizeBytes: MAX_TOURNAMENT_BACKGROUND_FILE_SIZE_BYTES,
+    });
+  });
+
   app.post("/api/tournaments", requireTournamentManager, async (req, res) => {
     try {
       const input = createTournamentSchema.parse(req.body);
       const userId = (req.session as any).userId;
+      if (!isCloudinaryImageUrl(input.backgroundImageUrl)) {
+        return res.status(400).json({
+          message: "El fondo del torneo debe estar alojado en Cloudinary",
+        });
+      }
 
       // Convertir strings a Date si es necesario
       const startDate = typeof input.startDate === "string" ? new Date(input.startDate) : input.startDate;
@@ -1265,6 +1310,11 @@ export async function registerRoutes(
       if (!manageableTournament) return;
 
       const input = updateTournamentSchema.parse(req.body);
+      if (!isCloudinaryImageUrl(input.backgroundImageUrl)) {
+        return res.status(400).json({
+          message: "El fondo del torneo debe estar alojado en Cloudinary",
+        });
+      }
 
       // Convertir strings a Date si es necesario
       const updateData: any = { ...input };

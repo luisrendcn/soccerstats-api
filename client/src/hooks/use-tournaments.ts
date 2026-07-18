@@ -128,6 +128,32 @@ export function useUpdateTournament() {
   });
 }
 
+export interface TournamentBackgroundSignature {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  folder: string;
+  signature: string;
+  resourceType: "image";
+  maxFileSizeBytes: number;
+}
+
+export function useTournamentBackgroundSignature() {
+  return useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch("/api/tournaments/background-signature", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to prepare background upload");
+      }
+      return res.json() as Promise<TournamentBackgroundSignature>;
+    },
+  });
+}
+
 export function useDeleteTournament() {
   const queryClient = useQueryClient();
   return useMutation<

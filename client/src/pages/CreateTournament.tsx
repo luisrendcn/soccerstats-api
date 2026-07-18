@@ -1,4 +1,9 @@
-import { useCreateTournament, useTournament, useUpdateTournament } from "@/hooks/use-tournaments";
+import {
+  useCreateTournament,
+  useTournament,
+  useTournamentBackgroundSignature,
+  useUpdateTournament,
+} from "@/hooks/use-tournaments";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader2, ArrowLeft, Image as ImageIcon, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/lib/i18n.tsx";
 import {
@@ -27,22 +32,28 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
   const { t } = useLanguage();
   const createTournament = useCreateTournament();
   const updateTournament = useUpdateTournament();
+  const backgroundSignature = useTournamentBackgroundSignature();
   const { data: existingTournament } = useTournament(tournamentId || 0);
 
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    backgroundImageUrl: "",
     tournamentType: "soccer" as "soccer" | "videogame",
     startDate: "",
     endDate: "",
     status: "draft" as "draft" | "active" | "finished",
   });
+  const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
+  const [backgroundPreviewUrl, setBackgroundPreviewUrl] = useState("");
+  const [backgroundInputKey, setBackgroundInputKey] = useState(0);
 
   useEffect(() => {
     if (existingTournament) {
       setFormData({
         name: existingTournament.name || "",
         description: existingTournament.description || "",
+        backgroundImageUrl: existingTournament.backgroundImageUrl || "",
         tournamentType:
           (existingTournament.tournamentType as "soccer" | "videogame") ||
           "soccer",
@@ -56,6 +67,43 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
       });
     }
   }, [existingTournament]);
+
+  useEffect(() => {
+    if (!backgroundFile) {
+      setBackgroundPreviewUrl("");
+      return;
+    }
+    const objectUrl = URL.createObjectURL(backgroundFile);
+    setBackgroundPreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [backgroundFile]);
+
+  const uploadTournamentBackground = async (file: File) => {
+    const signature = await backgroundSignature.mutateAsync();
+    if (file.size > signature.maxFileSizeBytes) {
+      throw new Error(t("tournamentBackgroundTooLarge"));
+    }
+    if (!file.type.startsWith("image/")) {
+      throw new Error(t("tournamentBackgroundMustBeImage"));
+    }
+
+    const uploadForm = new FormData();
+    uploadForm.append("file", file);
+    uploadForm.append("api_key", signature.apiKey);
+    uploadForm.append("timestamp", String(signature.timestamp));
+    uploadForm.append("folder", signature.folder);
+    uploadForm.append("signature", signature.signature);
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${signature.cloudName}/image/upload`,
+      { method: "POST", body: uploadForm },
+    );
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error?.message || t("tournamentBackgroundUploadError"));
+    }
+    return payload.secure_url as string;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,9 +127,13 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
     }
 
     try {
+      const backgroundImageUrl = backgroundFile
+        ? await uploadTournamentBackground(backgroundFile)
+        : formData.backgroundImageUrl || null;
       const data = {
         name: formData.name,
         description: formData.description || undefined,
+        backgroundImageUrl,
         tournamentType: formData.tournamentType,
         startDate: new Date(formData.startDate).toISOString(),
         endDate: formData.endDate ? new Date(formData.endDate).toISOString() : undefined,
@@ -106,7 +158,12 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
     }
   };
 
-  const isLoading = createTournament.isPending || updateTournament.isPending;
+  const isLoading =
+    createTournament.isPending ||
+    updateTournament.isPending ||
+    backgroundSignature.isPending;
+  const activeBackgroundPreview =
+    backgroundPreviewUrl || formData.backgroundImageUrl;
 
   return (
     <div className="space-y-6">
@@ -150,6 +207,49 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
               }
               rows={4}
             />
+          </div>
+
+          <div className="space-y-3">
+            <Label htmlFor="backgroundImage">{t("tournamentBackgroundImage")}</Label>
+            {activeBackgroundPreview && (
+              <div className="relative overflow-hidden rounded-lg border border-border">
+                <img
+                  src={activeBackgroundPreview}
+                  alt=""
+                  className="h-36 w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/20" />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="absolute right-2 top-2"
+                  onClick={() => {
+                    setBackgroundFile(null);
+                    setFormData({ ...formData, backgroundImageUrl: "" });
+                    setBackgroundInputKey((key) => key + 1);
+                  }}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  {t("remove")}
+                </Button>
+              </div>
+            )}
+            <div className="flex items-center gap-3">
+              <Input
+                key={backgroundInputKey}
+                id="backgroundImage"
+                type="file"
+                accept="image/*"
+                onChange={(event) =>
+                  setBackgroundFile(event.target.files?.[0] || null)
+                }
+              />
+              <ImageIcon className="h-5 w-5 shrink-0 text-muted-foreground" />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("tournamentBackgroundImageHint")}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -230,7 +330,11 @@ export default function CreateTournament({ tournamentId }: TournamentFormProps) 
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {tournamentId ? t("updating") : t("creating")}
+                  {backgroundSignature.isPending
+                    ? t("uploadingBackground")
+                    : tournamentId
+                      ? t("updating")
+                      : t("creating")}
                 </>
               ) : tournamentId ? (
                 t("updateTournament")

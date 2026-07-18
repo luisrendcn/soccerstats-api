@@ -112,6 +112,7 @@ export const tournaments = pgTable("tournaments", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
+  backgroundImageUrl: text("background_image_url"),
   tournamentType: text("tournament_type").notNull().default("soccer"),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date"),
@@ -355,6 +356,7 @@ export const registerSchema = z
 export const createTournamentSchema = z.object({
   name: z.string().min(2, "El nombre es requerido").max(100),
   description: z.string().optional(),
+  backgroundImageUrl: z.string().url().optional().nullable(),
   tournamentType: z.enum(["soccer", "videogame"]).default("soccer"),
   startDate: z.date().or(z.string().datetime()),
   endDate: z.date().or(z.string().datetime()).optional(),

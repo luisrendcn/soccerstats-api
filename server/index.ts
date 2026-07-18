@@ -282,6 +282,7 @@ app.use((req, res, next) => {
       WHERE requested_role = 'team'
     `);
     await db.execute(sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS tournament_type text NOT NULL DEFAULT 'soccer'`);
+    await db.execute(sql`ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS background_image_url text`);
     await db.execute(sql`ALTER TABLE tournament_teams ADD COLUMN IF NOT EXISTS twitch_channel text`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS match_highlights (

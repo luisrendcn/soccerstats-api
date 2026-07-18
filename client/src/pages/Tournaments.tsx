@@ -20,10 +20,16 @@ import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useLanguage } from "@/lib/i18n.tsx";
 
-const statusVariants: Record<string, any> = {
-  draft: "secondary",
-  active: "default",
-  finished: "outline",
+const fallbackTournamentBackgrounds = [
+  "from-emerald-900 via-slate-900 to-sky-900",
+  "from-indigo-900 via-slate-900 to-rose-900",
+  "from-zinc-900 via-stone-900 to-amber-900",
+];
+
+const statusBadgeClasses: Record<string, string> = {
+  draft: "border-yellow-300/50 bg-yellow-300 text-yellow-950",
+  active: "border-emerald-300/50 bg-emerald-400 text-emerald-950",
+  finished: "border-red-300/50 bg-red-400 text-red-950",
 };
 
 export default function Tournaments() {
@@ -31,7 +37,6 @@ export default function Tournaments() {
   const { t, language } = useLanguage();
   const { data: tournaments, isLoading } = useTournaments();
   const { data: auth } = useAuth();
-  const isPublic = auth?.userRole === 'public';
   const canManageTournaments = auth?.userRole === 'admin' || auth?.userRole === 'tournament_manager';
   const deleteTournament = useDeleteTournament();
   const { toast } = useToast();
@@ -83,73 +88,110 @@ export default function Tournaments() {
           </Card>
       ) : (
         <div className="grid gap-4">
-          {tournaments.map((tournament) => (
-            <Card key={tournament.id} className="p-6 hover:shadow-md transition-shadow cursor-pointer" onClick={() => setLocation(`/tournaments/${tournament.id}`)}>
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold">{tournament.name}</h2>
-                  {tournament.description && (
-                    <p className="text-sm text-muted-foreground mt-1">{tournament.description}</p>
-                  )}
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <Badge variant={statusVariants[tournament.status] || "secondary"}>
-                    {{
-                      draft: t("draft"),
-                      active: t("active"),
-                      finished: t("finished"),
-                    }[tournament.status] || tournament.status}
-                  </Badge>
-                  {tournament.tournamentType === "videogame" && (
-                    <Badge className="bg-primary/10 text-primary">
-                      <Gamepad2 className="mr-1 h-3 w-3" />
-                      {t("videogame")}
-                    </Badge>
-                  )}
-                </div>
-              </div>
+          {tournaments.map((tournament, index) => {
+            const hasBackground = Boolean(tournament.backgroundImageUrl);
+            const fallbackBackground =
+              fallbackTournamentBackgrounds[index % fallbackTournamentBackgrounds.length];
 
-              <div className="flex gap-4 text-sm text-muted-foreground mb-4">
-                {tournament.startDate && (
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    {new Date(tournament.startDate).toLocaleDateString(language === "es" ? "es-ES" : "en-US")}
-                  </div>
+            return (
+              <Card
+                key={tournament.id}
+                className={`relative min-h-[220px] overflow-hidden border-0 p-0 shadow-md transition-all hover:shadow-lg ${
+                  hasBackground ? "bg-slate-950" : `bg-gradient-to-br ${fallbackBackground}`
+                }`}
+                onClick={() => setLocation(`/tournaments/${tournament.id}`)}
+              >
+                {hasBackground && (
+                  <img
+                    src={tournament.backgroundImageUrl || ""}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                    loading="lazy"
+                  />
                 )}
-                {tournament.endDate && (
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    {new Date(tournament.endDate).toLocaleDateString(language === "es" ? "es-ES" : "en-US")}
-                  </div>
-                )}
-              </div>
+                <div className="absolute inset-0 bg-gradient-to-br from-black/80 via-black/45 to-black/70" />
+                <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 to-transparent" />
 
-              <div className="flex gap-2 mt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLocation(`/tournaments/${tournament.id}`);
-                  }}
-                >
-                  {t("viewDetails")}
-                </Button>
-                {canManageTournaments && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeletingId(tournament.id);
-                    }}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            </Card>
-          ))}
+                <div className="relative z-10 flex min-h-[220px] cursor-pointer flex-col justify-between p-5 text-white">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-2xl font-bold leading-tight drop-shadow-sm">
+                        {tournament.name}
+                      </h2>
+                      {tournament.description && (
+                        <p className="mt-2 line-clamp-3 text-sm text-white/85">
+                          {tournament.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <Badge
+                        className={
+                          statusBadgeClasses[tournament.status] ||
+                          "border-white/20 bg-white/90 text-slate-950"
+                        }
+                      >
+                        {{
+                          draft: t("draft"),
+                          active: t("active"),
+                          finished: t("finished"),
+                        }[tournament.status] || tournament.status}
+                      </Badge>
+                      {tournament.tournamentType === "videogame" && (
+                        <Badge className="border-white/20 bg-primary text-primary-foreground">
+                          <Gamepad2 className="mr-1 h-3 w-3" />
+                          {t("videogame")}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-4 flex flex-wrap gap-3 text-sm text-white/85">
+                      {tournament.startDate && (
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {new Date(tournament.startDate).toLocaleDateString(language === "es" ? "es-ES" : "en-US")}
+                        </div>
+                      )}
+                      {tournament.endDate && (
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {new Date(tournament.endDate).toLocaleDateString(language === "es" ? "es-ES" : "en-US")}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        className="border-white/40 bg-white/95 text-slate-950 hover:bg-white"
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLocation(`/tournaments/${tournament.id}`);
+                        }}
+                      >
+                        {t("viewDetails")}
+                      </Button>
+                      {canManageTournaments && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingId(tournament.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
 
